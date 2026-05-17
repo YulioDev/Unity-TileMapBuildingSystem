@@ -82,11 +82,26 @@ namespace TMBS.Runtime.Facade
                 {
                     if (ctx.HasDragBounds)
                     {
-                        _preview.ShowRect(ctx.DragBounds, ctx.QuickValidation.IsValid);
+                        if (ctx.Feedback.HasBlockedCells)
+                        {
+                            _preview.ShowRectMasked(ctx.DragBounds, ctx.Feedback.BlockedMask);
+                        }
+                        else
+                        {
+                            _preview.ShowRect(ctx.DragBounds, ctx.QuickValidation.IsValid);
+                        }
                     }
                     else
                     {
-                        _preview.ShowCell(ctx.Cell, ctx.QuickValidation.IsValid);
+                        var single = new BoundsInt(ctx.Cell, Vector3Int.one);
+                        if (ctx.Feedback.HasBlockedCells)
+                        {
+                            _preview.ShowRectMasked(single, ctx.Feedback.BlockedMask);
+                        }
+                        else
+                        {
+                            _preview.ShowCell(ctx.Cell, ctx.QuickValidation.IsValid);
+                        }
                     }
                 }
                 else
@@ -118,4 +133,3 @@ namespace TMBS.Runtime.Facade
         }
     }
 }
-

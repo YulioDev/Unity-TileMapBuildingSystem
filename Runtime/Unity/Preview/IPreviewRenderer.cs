@@ -1,4 +1,5 @@
 using UnityEngine;
+using TMBS.Core.Validation;
 
 namespace TMBS.Unity.Preview
 {
@@ -6,7 +7,7 @@ namespace TMBS.Unity.Preview
     {
         void ShowCell(Vector3Int cell, bool valid);
         void ShowRect(BoundsInt bounds, bool valid);
+        void ShowRectMasked(BoundsInt fullArea, CellMask blockedMask);
         void Hide();
     }
 }
-

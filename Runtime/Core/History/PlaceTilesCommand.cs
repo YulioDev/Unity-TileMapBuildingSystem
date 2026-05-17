@@ -11,31 +11,43 @@ namespace TMBS.Core.History
         private readonly IMetadataStore _metadata;
         private readonly Tilemap _tilemap;
         private readonly BoundsInt _bounds;
-        private readonly TileBase[] _before;
-        private readonly TileBase[] _after;
-        private readonly int _buildableId;
 
-        public PlaceTilesCommand(ITilemapBatchWriter writer, IMetadataStore metadata, Tilemap tilemap, BoundsInt bounds, TileBase[] before, TileBase[] after, int buildableId)
+        private readonly TileBase[] _beforeTiles;
+        private readonly TileBase[] _afterTiles;
+
+        private readonly BuildRecord?[] _beforeMeta;
+        private readonly BuildRecord?[] _afterMeta;
+
+        public PlaceTilesCommand(
+            ITilemapBatchWriter writer,
+            IMetadataStore metadata,
+            Tilemap tilemap,
+            BoundsInt bounds,
+            TileBase[] beforeTiles,
+            TileBase[] afterTiles,
+            BuildRecord?[] beforeMeta,
+            BuildRecord?[] afterMeta)
         {
             _writer = writer;
             _metadata = metadata;
             _tilemap = tilemap;
             _bounds = bounds;
-            _before = before;
-            _after = after;
-            _buildableId = buildableId;
+            _beforeTiles = beforeTiles;
+            _afterTiles = afterTiles;
+            _beforeMeta = beforeMeta;
+            _afterMeta = afterMeta;
         }
 
         public void Execute()
         {
-            _writer.WriteBlock(_tilemap, _bounds, _after);
-            WriteMetadata(_after, BuildState.Completed);
+            _writer.WriteBlock(_tilemap, _bounds, _afterTiles);
+            ApplyMetadata(_afterMeta);
         }
 
         public void Undo()
         {
-            _writer.WriteBlock(_tilemap, _bounds, _before);
-            WriteMetadata(_before, BuildState.Completed);
+            _writer.WriteBlock(_tilemap, _bounds, _beforeTiles);
+            ApplyMetadata(_beforeMeta);
         }
 
         public void Redo()
@@ -43,31 +55,27 @@ namespace TMBS.Core.History
             Execute();
         }
 
-        private void WriteMetadata(TileBase[] tiles, BuildState state)
+        private void ApplyMetadata(BuildRecord?[] meta)
         {
-            int width = _bounds.size.x;
-            int height = _bounds.size.y;
-            var origin = _bounds.position;
+            if (_metadata == null) return;
+            if (meta == null) return;
 
-            int idx = 0;
-            for (int y = 0; y < height; y++)
+            for (int i = 0; i < meta.Length; i++)
             {
-                int cy = origin.y + y;
-                for (int x = 0; x < width; x++)
-                {
-                    var t = tiles[idx++];
-                    var cell = new Vector3Int(origin.x + x, cy, 0);
-                    if (t == null)
-                    {
-                        _metadata.Remove(cell);
-                    }
-                    else
-                    {
-                        _metadata.Set(new BuildRecord(_buildableId, cell, state));
-                    }
-                }
+                var m = meta[i];
+                Vector3Int cell = m.HasValue
+                    ? m.Value.Cell
+                    : new Vector3Int(
+                        _bounds.position.x + (i % _bounds.size.x),
+                        _bounds.position.y + ((i / _bounds.size.x) % _bounds.size.y),
+                        _bounds.position.z + (i / (_bounds.size.x * _bounds.size.y))
+                      );
+
+                if (!m.HasValue)
+                    _metadata.Remove(cell);
+                else
+                    _metadata.Set(m.Value);
             }
         }
     }
 }
-

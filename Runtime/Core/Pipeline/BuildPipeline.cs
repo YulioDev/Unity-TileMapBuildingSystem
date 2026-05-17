@@ -39,7 +39,8 @@ namespace TMBS.Core.Pipeline
                 ValidationResult.Valid,
                 ExecutionDecision.Reject,
                 default,
-                false);
+                false,
+                default);
 
             if (intent.Type == BuildIntentType.DragStart)
             {
@@ -64,6 +65,9 @@ namespace TMBS.Core.Pipeline
                 ctx = _steps[i].Execute(in ctx, in intent);
             }
 
+            // NOTA: No clamp antes de validar. El feedback/máscaras deben reflejar el drag real.
+            // ctx = ApplyBoundsClamp(ctx);
+
             if (intent.Type == BuildIntentType.Confirm)
             {
                 var full = _validatorPipeline.Validate(in ctx, ValidationMode.Full);
@@ -78,6 +82,42 @@ namespace TMBS.Core.Pipeline
             }
 
             return ctx;
+        }
+
+        private PipelineContext ApplyBoundsClamp(PipelineContext ctx)
+        {
+            if (!ctx.HasDragBounds) return ctx;
+
+            BoundsInt globalBounds = default;
+            bool found = false;
+
+            for (int i = 0; i < _validatorPipeline.InternalValidatorsCount; i++)
+            {
+                if (_validatorPipeline.TryGetBounds(i, out globalBounds))
+                {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) return ctx;
+
+            var b = ctx.DragBounds;
+
+            int minX = Mathf.Max(b.xMin, globalBounds.xMin);
+            int minY = Mathf.Max(b.yMin, globalBounds.yMin);
+            int maxX = Mathf.Min(b.xMax, globalBounds.xMax);
+            int maxY = Mathf.Min(b.yMax, globalBounds.yMax);
+
+            if (maxX <= minX || maxY <= minY)
+                return ctx;
+
+            var newBounds = new BoundsInt(
+                new Vector3Int(minX, minY, 0),
+                new Vector3Int(maxX - minX, maxY - minY, 1)
+            );
+
+            return ctx.WithDragBounds(newBounds);
         }
 
         private static BoundsInt ComputeRectBounds(Vector3Int a, Vector3Int b)
