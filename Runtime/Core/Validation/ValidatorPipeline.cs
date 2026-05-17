@@ -9,8 +9,7 @@ namespace TMBS.Core.Validation
 
         public ValidatorPipeline(List<IValidator> validators)
         {
-            _validators = validators;
-            _validators.Sort((a, b) => a.Priority.CompareTo(b.Priority));
+            _validators = validators ?? new List<IValidator>();
         }
 
         public ValidationResult Validate(in PipelineContext ctx, ValidationMode mode)

@@ -29,7 +29,6 @@ namespace TMBS.Runtime.Facade
         [SerializeField] private MonoBehaviour inputAdapter;
         [SerializeField] private Tilemap targetTilemap;
         [SerializeField] private Tilemap previewTilemap;
-        [SerializeField] private List<MonoBehaviour> validators = new List<MonoBehaviour>();
 
         private IBuildInputAdapter _input;
         private IBuildPipeline _pipeline;
@@ -46,7 +45,7 @@ namespace TMBS.Runtime.Facade
         private void OnEnable()
         {
             var composition = new TmbsCompositionRoot();
-            composition.Compose(this, rootConfig, instanceId, inputAdapter as IBuildInputAdapter, targetTilemap, previewTilemap, validators,
+            composition.Compose(this, rootConfig, instanceId, inputAdapter as IBuildInputAdapter, targetTilemap, previewTilemap, null,
                 out _input, out _pipeline, out _events, out _focus, out _history, out _metadata, out _preview, out _selectionService, out _executor, out _previewEvaluator, out _activeMode);
             
             if (_input != null)

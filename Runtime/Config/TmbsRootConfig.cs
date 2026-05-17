@@ -12,13 +12,14 @@ namespace TMBS.Runtime.Config
         public ExecutionMode executionMode = ExecutionMode.ImmediateOnly;
         public PreviewPolicy previewPolicy = PreviewPolicy.AlwaysOn;
 
-        
         public TileBase buildTile;
         public TileBase previewValidTile;
         public TileBase previewInvalidTile;
 
         public int historyCapacity = 256;
         public int metadataCapacity = 4096;
+
+        public List<ValidatorEntry> validators = new List<ValidatorEntry>();
     }
 }
 

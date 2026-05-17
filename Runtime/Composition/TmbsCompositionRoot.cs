@@ -63,38 +63,52 @@ namespace TMBS.Runtime.Facade
                 selectionService.Select(1);
             }
 
-            
             activeMode = new ImmediateBuildMode();
-            
+
             previewEvaluator = new PreviewPolicyEvaluator(config.previewPolicy);
-var validators = new List<IValidator>();
-validators.Add(new SelectionValidator());
-validators.Add(new OccupancyValidator(metadata));
 
-if (sceneValidators != null)
-{
-    for (int i = 0; i < sceneValidators.Count; i++)
-    {
-        if (sceneValidators[i] is IValidator v) validators.Add(v);
-    }
-}
+            var validators = new List<IValidator>();
 
-var validatorPipeline = new ValidatorPipeline(validators);
-var router = new ImmediateOnlyRouter();
+            if (config.validators != null)
+            {
+                for (int i = 0; i < config.validators.Count; i++)
+                {
+                    var entry = config.validators[i];
+                    if (entry == null)
+                        continue;
 
-var steps = new List<IPipelineStep>
-{
-    new ModeInterpretationStep(activeMode),
-    new SelectionGateStep(selectionService)
-};
+                    if (!entry.enabled)
+                        continue;
+
+                    var v = entry.validator;
+                    if (v == null)
+                        continue;
+
+                    if (v is IInjectableValidator injectable)
+                    {
+                        injectable.Inject(metadata);
+                    }
+
+                    validators.Add(v);
+                }
+            }
+
+            var validatorPipeline = new ValidatorPipeline(validators);
+            var router = new ImmediateOnlyRouter();
+
+            var steps = new List<IPipelineStep>
+            {
+                new ModeInterpretationStep(activeMode),
+                new SelectionGateStep(selectionService)
+            };
 
             pipeline = new BuildPipeline(gridSpace, validatorPipeline, router, steps);
 
             preview = new TilemapPreviewRenderer(previewTilemap, config.previewValidTile, config.previewInvalidTile);
-            
+
             var builder = new TileArrayBuilder();
             var writer = new TilemapBatchWriter(builder);
-            
+
             executor = new ImmediateBuildExecutor(writer, metadata, history, events, catalog, builder);
         }
     }

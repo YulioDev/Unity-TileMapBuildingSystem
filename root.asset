@@ -19,3 +19,28 @@ MonoBehaviour:
   previewInvalidTile: {fileID: 11400000, guid: 154a0bd315a96f144be4d5c9cc2fe362, type: 2}
   historyCapacity: 256
   metadataCapacity: 4096
+  validators:
+  - enabled: 0
+    validator:
+      rid: 7190439193056116804
+  - enabled: 1
+    validator:
+      rid: 7190439193056116805
+  - enabled: 1
+    validator:
+      rid: 7190439193056116806
+  references:
+    version: 2
+    RefIds:
+    - rid: 7190439193056116804
+      type: {class: OccupancyValidator, ns: TMBS.Core.Validation, asm: Assembly-CSharp}
+      data: 
+    - rid: 7190439193056116805
+      type: {class: SelectionValidator, ns: TMBS.Core.Validation, asm: Assembly-CSharp}
+      data: 
+    - rid: 7190439193056116806
+      type: {class: BoundsValidator, ns: TMBS.Core.Validation, asm: Assembly-CSharp}
+      data:
+        allowedBounds:
+          m_Position: {x: -50, y: -50, z: 0}
+          m_Size: {x: 100, y: 100, z: 1}
