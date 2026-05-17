@@ -18,6 +18,9 @@ namespace TMBS.Core.Validation
 
         public ValidationResult Validate(in PipelineContext ctx, ValidationMode mode)
         {
+            if (ctx.AlternateBehaviour)
+                return ValidationResult.Valid;
+
             var opBounds = ValidationUtil.GetOperationBounds(in ctx);
             // Si no hay volumen, no hay nada que hacer.
             int w = opBounds.size.x;

@@ -14,6 +14,8 @@ namespace TMBS.Core.Pipeline.Steps
 
         public PipelineContext Execute(in PipelineContext ctx, in BuildIntent intent)
         {
+            if (intent.AlternateBehaviour)
+                return ctx;
             return ctx.WithSelection(_selection.HasSelection, _selection.SelectedId);
         }
     }

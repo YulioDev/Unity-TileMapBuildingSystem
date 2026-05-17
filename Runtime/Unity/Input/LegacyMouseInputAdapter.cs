@@ -16,6 +16,7 @@ namespace TMBS.Unity.Input
 
         private bool _isActive;
         private bool _isDragging;
+        private bool _dragAlternate;
         private Camera _mainCamera;
 
         public void Enable() 
@@ -28,6 +29,7 @@ namespace TMBS.Unity.Input
         {
             _isActive = false;
             _isDragging = false;
+            _dragAlternate = false;
         }
 
         private void Update()
@@ -38,7 +40,7 @@ namespace TMBS.Unity.Input
             mouseWorldPos.z = 0f; 
 
             
-            bool isAlternate = UnityEngine.Input.GetKey(KeyCode.LeftShift);
+            bool isAlternate = UnityEngine.Input.GetKey(KeyCode.LeftShift) || UnityEngine.Input.GetKey(KeyCode.RightShift);
 
             
             if (UnityEngine.Input.GetMouseButtonDown(1))
@@ -52,17 +54,19 @@ namespace TMBS.Unity.Input
             if (UnityEngine.Input.GetMouseButtonDown(0))
             {
                 _isDragging = true;
-                BuildIntentRaised?.Invoke(new BuildIntent(BuildIntentType.DragStart, mouseWorldPos, isAlternate));
+                _dragAlternate = isAlternate;
+                BuildIntentRaised?.Invoke(new BuildIntent(BuildIntentType.DragStart, mouseWorldPos, _dragAlternate));
             }
             else if (UnityEngine.Input.GetMouseButton(0) && _isDragging)
             {
-                BuildIntentRaised?.Invoke(new BuildIntent(BuildIntentType.DragUpdate, mouseWorldPos, isAlternate));
+                BuildIntentRaised?.Invoke(new BuildIntent(BuildIntentType.DragUpdate, mouseWorldPos, _dragAlternate));
             }
             else if (UnityEngine.Input.GetMouseButtonUp(0) && _isDragging)
             {
                 _isDragging = false;
-                BuildIntentRaised?.Invoke(new BuildIntent(BuildIntentType.DragEnd, mouseWorldPos, isAlternate));
-                BuildIntentRaised?.Invoke(new BuildIntent(BuildIntentType.Confirm, mouseWorldPos, isAlternate));
+                BuildIntentRaised?.Invoke(new BuildIntent(BuildIntentType.DragEnd, mouseWorldPos, _dragAlternate));
+                BuildIntentRaised?.Invoke(new BuildIntent(BuildIntentType.Confirm, mouseWorldPos, _dragAlternate));
+                _dragAlternate = false;
             }
             
             else if (!_isDragging)

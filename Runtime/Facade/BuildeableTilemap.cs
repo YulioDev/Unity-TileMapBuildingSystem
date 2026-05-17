@@ -76,6 +76,12 @@ namespace TMBS.Runtime.Facade
 
             var ctx = _pipeline.Process(instanceId, in intent);
 
+            if (intent.Type == BuildIntentType.Cancel)
+            {
+                _preview?.Hide();
+                return;
+            }
+
             if (intent.Type != BuildIntentType.Confirm)
             {
                 if (_previewEvaluator.ShouldShowPreview(_activeMode))

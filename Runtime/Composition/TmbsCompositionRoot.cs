@@ -98,8 +98,8 @@ namespace TMBS.Runtime.Facade
 
             var steps = new List<IPipelineStep>
             {
-                new ModeInterpretationStep(activeMode),
-                new SelectionGateStep(selectionService)
+                new SelectionGateStep(selectionService),
+                new ModeInterpretationStep(activeMode)
             };
 
             pipeline = new BuildPipeline(gridSpace, validatorPipeline, router, steps);

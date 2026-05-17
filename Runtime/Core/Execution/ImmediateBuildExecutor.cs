@@ -77,9 +77,21 @@ namespace TMBS.Core.Execution
             BuildRecord?[] beforeMeta = null;
             BuildRecord?[] afterMeta = null;
 
-            if (_metadata != null && !ctx.AlternateBehaviour)
+            int len = afterTiles.Length;
+
+            if (writeMask != null)
             {
-                int len = afterTiles.Length;
+                for (int i = 0; i < len; i++)
+                {
+                    if (!writeMask.Bits[i])
+                    {
+                        afterTiles[i] = beforeTiles[i];
+                    }
+                }
+            }
+
+            if (_metadata != null)
+            {
                 beforeMeta = new BuildRecord?[len];
                 afterMeta = new BuildRecord?[len];
 
@@ -102,7 +114,6 @@ namespace TMBS.Core.Execution
 
                     if (!canWrite)
                     {
-                        afterTiles[i] = beforeTiles[i];
                         afterMeta[i] = beforeMeta[i];
                         continue;
                     }
