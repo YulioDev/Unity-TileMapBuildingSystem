@@ -19,6 +19,9 @@ namespace TMBS.Runtime.Config
         public int historyCapacity = 256;
         public int metadataCapacity = 4096;
 
+        [Range(0f, 1f)]
+        public float sparseWriteDenseThreshold = 0.65f;
+
         public List<ValidatorEntry> validators = new List<ValidatorEntry>();
     }
 }

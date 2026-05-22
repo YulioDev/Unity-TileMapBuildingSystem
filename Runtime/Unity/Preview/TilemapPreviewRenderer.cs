@@ -7,8 +7,8 @@ namespace TMBS.Unity.Preview
     public sealed class TilemapPreviewRenderer : IPreviewRenderer
     {
         private readonly Tilemap _tilemap;
-        private readonly TileBase _valid;
-        private readonly TileBase _invalid;
+        private TileBase _valid;
+        private TileBase _invalid;
 
         private BoundsInt _last;
         private bool _hasLast;
@@ -19,8 +19,18 @@ namespace TMBS.Unity.Preview
 
         public TilemapPreviewRenderer(Tilemap tilemap, TileBase valid, TileBase invalid)
         {
+            if (tilemap == null)
+                throw new System.ArgumentNullException(nameof(tilemap));
+
             _tilemap = tilemap;
             _valid = valid;
+            _invalid = invalid;
+        }
+
+        public void UpdateTiles(TileBase valid, TileBase invalid)
+        {
+            Hide();
+            _valid   = valid;
             _invalid = invalid;
         }
 
@@ -135,25 +145,12 @@ namespace TMBS.Unity.Preview
 
         private static int Volume(BoundsInt b)
         {
-            return b.size.x * b.size.y * b.size.z;
+            return TMBS.Core.Grid.TileBlockIndex.Volume(b);
         }
 
         private static Vector3Int CellAt(BoundsInt b, int index)
         {
-            int w = b.size.x;
-            int h = b.size.y;
-            int xy = w * h;
-            
-            int z = index / xy;
-            int rem = index - (z * xy);
-            int y = rem / w;
-            int x = rem - (y * w);
-            
-            return new Vector3Int(
-                b.position.x + x,
-                b.position.y + y,
-                b.position.z + z
-            );
+            return TMBS.Core.Grid.TileBlockIndex.CellAt(b, index);
         }
 
         private static bool SameBounds(in BoundsInt a, in BoundsInt b)

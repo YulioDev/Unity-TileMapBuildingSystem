@@ -11,6 +11,7 @@ using TMBS.Core.Modes;
 using TMBS.Core.Pipeline;
 using TMBS.Core.Pipeline.Steps;
 using TMBS.Core.Preview;
+using TMBS.Core.Selection;
 using TMBS.Core.Validation;
 using TMBS.Runtime.Config;
 using TMBS.Unity.GridSpaces;
@@ -38,7 +39,7 @@ namespace TMBS.Runtime.Facade
             out IUndoRedoHistory history,
             out IMetadataStore metadata,
             out IPreviewRenderer preview,
-            out IBuildableSelectionService selectionService,
+            out TileSelectionState selectionState,
             out ImmediateBuildExecutor executor,
             out PreviewPolicyEvaluator previewEvaluator,
             out IBuildMode activeMode)
@@ -46,8 +47,10 @@ namespace TMBS.Runtime.Facade
             input = inputAdapter;
             events = new SimpleEventBus();
             focus = new AlwaysFocusService();
-            history = new UndoRedoHistory { Capacity = config.historyCapacity };
-            metadata = new DefaultMetadataStore(config.metadataCapacity);
+            int histCap = config.historyCapacity > 0 ? config.historyCapacity : 50;
+            int metaCap = config.metadataCapacity > 0 ? config.metadataCapacity : 1000;
+            history = new UndoRedoHistory { Capacity = histCap };
+            metadata = new DefaultMetadataStore(metaCap);
 
             IGridSpace gridSpace = new UnityGridSpace(targetTilemap);
 
@@ -57,15 +60,14 @@ namespace TMBS.Runtime.Facade
                 catalog.Register(new BuildableDefinition(1, "DefaultWall", config.buildTile));
             }
 
-            selectionService = new DefaultBuildableSelectionService();
-            if (config.buildTile != null)
-            {
-                selectionService.Select(1);
-            }
+            var tileSelectionState = new TileSelectionState();
+            selectionState = tileSelectionState;
 
             activeMode = new ImmediateBuildMode();
 
             previewEvaluator = new PreviewPolicyEvaluator(config.previewPolicy);
+
+            var occupancySource = new UnityTilemapOccupancySource(targetTilemap);
 
             var validators = new List<IValidator>();
 
@@ -88,8 +90,29 @@ namespace TMBS.Runtime.Facade
                     {
                         injectable.Inject(metadata);
                     }
+                    if (v is IOccupancySourceInjectable occInjectable)
+                    {
+                        occInjectable.InjectOccupancySource(occupancySource);
+                    }
 
                     validators.Add(v);
+                }
+            }
+
+            if (sceneValidators != null)
+            {
+                for (int i = 0; i < sceneValidators.Count; i++)
+                {
+                    if (sceneValidators[i] is IValidator validator)
+                    {
+                        if (validator is IInjectableValidator injectable)
+                            injectable.Inject(metadata);
+
+                        if (validator is IOccupancySourceInjectable occInjectable)
+                            occInjectable.InjectOccupancySource(occupancySource);
+
+                        validators.Add(validator);
+                    }
                 }
             }
 
@@ -98,7 +121,7 @@ namespace TMBS.Runtime.Facade
 
             var steps = new List<IPipelineStep>
             {
-                new SelectionGateStep(selectionService),
+                new TileInjectionStep(tileSelectionState),
                 new ModeInterpretationStep(activeMode)
             };
 
@@ -107,9 +130,10 @@ namespace TMBS.Runtime.Facade
             preview = new TilemapPreviewRenderer(previewTilemap, config.previewValidTile, config.previewInvalidTile);
 
             var builder = new TileArrayBuilder();
-            var writer = new TilemapBatchWriter(builder);
+            var batchWriter = new TilemapBatchWriter();
+            var writeStrategy = new HybridTilemapWriteStrategy(batchWriter, config.sparseWriteDenseThreshold);
 
-            executor = new ImmediateBuildExecutor(writer, metadata, history, events, catalog, builder);
+            executor = new ImmediateBuildExecutor(writeStrategy, metadata, history, events, builder, config.sparseWriteDenseThreshold);
         }
     }
 }

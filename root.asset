@@ -12,21 +12,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e322a0564eaff6b4d90f643a97ba866f, type: 3}
   m_Name: root
   m_EditorClassIdentifier: Assembly-CSharp::TMBS.Runtime.Config.TmbsRootConfig
-  executionMode: 1
+  executionMode: 0
   previewPolicy: 2
-  buildTile: {fileID: 11400000, guid: 154a0bd315a96f144be4d5c9cc2fe362, type: 2}
-  previewValidTile: {fileID: 11400000, guid: 154a0bd315a96f144be4d5c9cc2fe362, type: 2}
-  previewInvalidTile: {fileID: 11400000, guid: 154a0bd315a96f144be4d5c9cc2fe362, type: 2}
+  buildTile: {fileID: 11400000, guid: 180f55a6f11b7d54e828326e9f02054a, type: 2}
+  previewValidTile: {fileID: 11400000, guid: 2e015b42f4c8fdd4ba88a7f8d2ab743b, type: 2}
+  previewInvalidTile: {fileID: 11400000, guid: 50202cb830faae04ba588237a9a8923b, type: 2}
   historyCapacity: 256
   metadataCapacity: 4096
   validators:
-  - enabled: 0
+  - enabled: 1
     validator:
       rid: 7190439193056116804
   - enabled: 1
     validator:
       rid: 7190439193056116805
-  - enabled: 1
+  - enabled: 0
     validator:
       rid: 7190439193056116806
   references:
@@ -34,13 +34,19 @@ MonoBehaviour:
     RefIds:
     - rid: 7190439193056116804
       type: {class: OccupancyValidator, ns: TMBS.Core.Validation, asm: Assembly-CSharp}
-      data: 
+      data:
+        allowOverwrite: 0
+        skipOccupiedCells: 1
+        markBlockedArea: 1
     - rid: 7190439193056116805
       type: {class: SelectionValidator, ns: TMBS.Core.Validation, asm: Assembly-CSharp}
-      data: 
+      data:
+        clampPreviewIfInvalid: 1
     - rid: 7190439193056116806
       type: {class: BoundsValidator, ns: TMBS.Core.Validation, asm: Assembly-CSharp}
       data:
         allowedBounds:
-          m_Position: {x: -50, y: -50, z: 0}
-          m_Size: {x: 100, y: 100, z: 1}
+          m_Position: {x: 0, y: 0, z: 0}
+          m_Size: {x: 15, y: 15, z: 1}
+        allowPartialPlacement: 1
+        markBlockedArea: 1

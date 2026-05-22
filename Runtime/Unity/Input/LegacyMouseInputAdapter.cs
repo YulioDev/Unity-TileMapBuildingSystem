@@ -9,7 +9,7 @@ namespace TMBS.Unity.Input
     {
         public InputCapabilities Capabilities => new InputCapabilities(
             hasPoint: true, hasConfirm: true, hasCancel: true, 
-            hasDrag: true, hasUndo: false, hasRedo: false, 
+            hasDrag: true, hasUndo: true, hasRedo: true, 
             hasPipette: false, hasAlternateModifier: true);
 
         public event Action<BuildIntent> BuildIntentRaised;
@@ -39,9 +39,23 @@ namespace TMBS.Unity.Input
             Vector3 mouseWorldPos = _mainCamera.ScreenToWorldPoint(UnityEngine.Input.mousePosition);
             mouseWorldPos.z = 0f; 
 
-            
             bool isAlternate = UnityEngine.Input.GetKey(KeyCode.LeftShift) || UnityEngine.Input.GetKey(KeyCode.RightShift);
+            bool isCtrl = UnityEngine.Input.GetKey(KeyCode.LeftControl) || UnityEngine.Input.GetKey(KeyCode.RightControl);
 
+            if (isCtrl && UnityEngine.Input.GetKeyDown(KeyCode.Z))
+            {
+                if (isAlternate)
+                    BuildIntentRaised?.Invoke(new BuildIntent(BuildIntentType.Redo, mouseWorldPos, false));
+                else
+                    BuildIntentRaised?.Invoke(new BuildIntent(BuildIntentType.Undo, mouseWorldPos, false));
+                return;
+            }
+
+            if (isCtrl && UnityEngine.Input.GetKeyDown(KeyCode.Y))
+            {
+                BuildIntentRaised?.Invoke(new BuildIntent(BuildIntentType.Redo, mouseWorldPos, false));
+                return;
+            }
             
             if (UnityEngine.Input.GetMouseButtonDown(1))
             {
