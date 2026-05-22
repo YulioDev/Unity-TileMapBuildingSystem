@@ -10,7 +10,9 @@ namespace TMBS.Core.Intents
         DragUpdate,
         DragEnd,
         Confirm,
-        Cancel
+        Cancel,
+        Undo,
+        Redo
     }
 
     public readonly struct BuildIntent

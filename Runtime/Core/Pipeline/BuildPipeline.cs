@@ -24,6 +24,11 @@ namespace TMBS.Core.Pipeline
             _steps = steps;
         }
 
+        public void CancelActiveOperation()
+        {
+            _hasDragStart = false;
+        }
+
         public PipelineContext Process(string instanceId, in BuildIntent intent)
         {
             var cell = _gridSpace.WorldToCell(intent.WorldPoint);
@@ -33,8 +38,7 @@ namespace TMBS.Core.Pipeline
                 cell,
                 true,
                 intent.AlternateBehaviour,
-                false,
-                -1,
+                null,
                 ValidationResult.Valid,
                 ValidationResult.Valid,
                 ExecutionDecision.Reject,
@@ -106,15 +110,20 @@ namespace TMBS.Core.Pipeline
 
             int minX = Mathf.Max(b.xMin, globalBounds.xMin);
             int minY = Mathf.Max(b.yMin, globalBounds.yMin);
+            int minZ = Mathf.Max(b.zMin, globalBounds.zMin);
             int maxX = Mathf.Min(b.xMax, globalBounds.xMax);
             int maxY = Mathf.Min(b.yMax, globalBounds.yMax);
+            int maxZ = Mathf.Min(b.zMax, globalBounds.zMax);
 
-            if (maxX <= minX || maxY <= minY)
-                return ctx;
+            if (maxX <= minX || maxY <= minY || maxZ <= minZ)
+            {
+                var clampedToCursor = new BoundsInt(ctx.Cell, new Vector3Int(1, 1, 1));
+                return ctx.WithDragBounds(clampedToCursor);
+            }
 
             var newBounds = new BoundsInt(
-                new Vector3Int(minX, minY, 0),
-                new Vector3Int(maxX - minX, maxY - minY, 1)
+                new Vector3Int(minX, minY, minZ),
+                new Vector3Int(maxX - minX, maxY - minY, maxZ - minZ)
             );
 
             return ctx.WithDragBounds(newBounds);

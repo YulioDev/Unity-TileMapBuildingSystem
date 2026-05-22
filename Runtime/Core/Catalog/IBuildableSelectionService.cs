@@ -2,6 +2,7 @@ using System;
 
 namespace TMBS.Core.Catalog
 {
+    [Obsolete("Sustituido por BuildSelectionData y TileSelectionState")]
     public interface IBuildableSelectionService
     {
         bool HasSelection { get; }

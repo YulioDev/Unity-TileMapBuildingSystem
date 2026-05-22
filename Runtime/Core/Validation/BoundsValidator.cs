@@ -16,9 +16,11 @@ namespace TMBS.Core.Validation
         // Para preview mixto: marcar fuera de bounds como inválido.
         public bool markBlockedArea = true;
 
+        public bool validateAlternateBehaviour = true;
+
         public ValidationResult Validate(in PipelineContext ctx, ValidationMode mode)
         {
-            if (ctx.AlternateBehaviour)
+            if (ctx.AlternateBehaviour && !validateAlternateBehaviour)
                 return ValidationResult.Valid;
 
             var opBounds = ValidationUtil.GetOperationBounds(in ctx);

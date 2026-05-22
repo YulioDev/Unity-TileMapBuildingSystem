@@ -1,4 +1,5 @@
 using System;
+using TMBS.Core.Grid;
 using UnityEngine;
 
 namespace TMBS.Core.Validation
@@ -13,20 +14,11 @@ namespace TMBS.Core.Validation
         public bool[] Bits { get; }
         public int Length => Bits.Length;
 
-        private readonly int _w;
-        private readonly int _h;
-        private readonly int _d;
-        private readonly Vector3Int _origin;
-
         public CellMask(BoundsInt bounds, bool defaultValue)
         {
             Bounds = bounds;
-            _origin = bounds.position;
-            _w = Math.Max(0, bounds.size.x);
-            _h = Math.Max(0, bounds.size.y);
-            _d = Math.Max(0, bounds.size.z);
 
-            int len = _w * _h * _d;
+            int len = TileBlockIndex.Volume(bounds);
             Bits = new bool[len];
 
             if (defaultValue)
@@ -45,21 +37,12 @@ namespace TMBS.Core.Validation
             if (!Bounds.Contains(cell))
                 throw new InvalidOperationException("CellMask.IndexOf called with a cell outside of Bounds.");
 
-            int x = cell.x - _origin.x;
-            int y = cell.y - _origin.y;
-            int z = cell.z - _origin.z;
-
-            return (z * _h + y) * _w + x;
+            return TileBlockIndex.IndexOf(Bounds, cell);
         }
 
         public Vector3Int CellAt(int index)
         {
-            int xy = _w * _h;
-            int z = index / xy;
-            int rem = index - (z * xy);
-            int y = rem / _w;
-            int x = rem - (y * _w);
-            return new Vector3Int(_origin.x + x, _origin.y + y, _origin.z + z);
+            return TileBlockIndex.CellAt(Bounds, index);
         }
 
         public bool AnyTrue()

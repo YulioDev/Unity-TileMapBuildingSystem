@@ -11,8 +11,8 @@ namespace TMBS.Core.Pipeline
         public readonly Vector3Int Cell;
         public readonly bool HasCell;
         public readonly bool AlternateBehaviour;
-        public readonly bool HasSelection;
-        public readonly int SelectedBuildableId;
+        public readonly UnityEngine.Tilemaps.TileBase SelectedTile;
+        public bool HasSelection => SelectedTile != null;
         public readonly ValidationResult QuickValidation;
         public readonly ValidationResult FullValidation;
         public readonly ExecutionDecision Decision;
@@ -26,8 +26,7 @@ namespace TMBS.Core.Pipeline
             Vector3Int cell,
             bool hasCell,
             bool alternateBehaviour,
-            bool hasSelection,
-            int selectedBuildableId,
+            UnityEngine.Tilemaps.TileBase selectedTile,
             ValidationResult quickValidation,
             ValidationResult fullValidation,
             ExecutionDecision decision,
@@ -40,8 +39,7 @@ namespace TMBS.Core.Pipeline
             Cell = cell;
             HasCell = hasCell;
             AlternateBehaviour = alternateBehaviour;
-            HasSelection = hasSelection;
-            SelectedBuildableId = selectedBuildableId;
+            SelectedTile = selectedTile;
             QuickValidation = quickValidation;
             FullValidation = fullValidation;
             Decision = decision;
@@ -51,22 +49,35 @@ namespace TMBS.Core.Pipeline
         }
 
         public PipelineContext WithCell(Vector3Int cell) =>
-            new PipelineContext(InstanceId, WorldPoint, cell, true, AlternateBehaviour, HasSelection, SelectedBuildableId, QuickValidation, FullValidation, Decision, DragBounds, HasDragBounds, Feedback);
+            new PipelineContext(InstanceId, WorldPoint, cell, true, AlternateBehaviour, SelectedTile, QuickValidation, FullValidation, Decision, DragBounds, HasDragBounds, Feedback);
 
-        public PipelineContext WithSelection(bool hasSelection, int selectedBuildableId) =>
-            new PipelineContext(InstanceId, WorldPoint, Cell, HasCell, AlternateBehaviour, hasSelection, selectedBuildableId, QuickValidation, FullValidation, Decision, DragBounds, HasDragBounds, Feedback);
+        public PipelineContext WithTile(UnityEngine.Tilemaps.TileBase tile) =>
+            new PipelineContext(
+                InstanceId,
+                WorldPoint,
+                Cell,
+                HasCell,
+                AlternateBehaviour,
+                tile,
+                QuickValidation,
+                FullValidation,
+                Decision,
+                DragBounds,
+                HasDragBounds,
+                Feedback
+            );
 
         public PipelineContext WithQuickValidation(ValidationResult result) =>
-            new PipelineContext(InstanceId, WorldPoint, Cell, HasCell, AlternateBehaviour, HasSelection, SelectedBuildableId, result, FullValidation, Decision, DragBounds, HasDragBounds, result.Feedback);
+            new PipelineContext(InstanceId, WorldPoint, Cell, HasCell, AlternateBehaviour, SelectedTile, result, FullValidation, Decision, DragBounds, HasDragBounds, result.Feedback);
 
         public PipelineContext WithFullValidation(ValidationResult result) =>
-            new PipelineContext(InstanceId, WorldPoint, Cell, HasCell, AlternateBehaviour, HasSelection, SelectedBuildableId, QuickValidation, result, Decision, DragBounds, HasDragBounds, result.Feedback);
+            new PipelineContext(InstanceId, WorldPoint, Cell, HasCell, AlternateBehaviour, SelectedTile, QuickValidation, result, Decision, DragBounds, HasDragBounds, result.Feedback);
 
         public PipelineContext WithDecision(ExecutionDecision decision) =>
-            new PipelineContext(InstanceId, WorldPoint, Cell, HasCell, AlternateBehaviour, HasSelection, SelectedBuildableId, QuickValidation, FullValidation, decision, DragBounds, HasDragBounds, Feedback);
+            new PipelineContext(InstanceId, WorldPoint, Cell, HasCell, AlternateBehaviour, SelectedTile, QuickValidation, FullValidation, decision, DragBounds, HasDragBounds, Feedback);
 
         public PipelineContext WithDragBounds(BoundsInt bounds) =>
-            new PipelineContext(InstanceId, WorldPoint, Cell, HasCell, AlternateBehaviour, HasSelection, SelectedBuildableId, QuickValidation, FullValidation, Decision, bounds, true, Feedback);
+            new PipelineContext(InstanceId, WorldPoint, Cell, HasCell, AlternateBehaviour, SelectedTile, QuickValidation, FullValidation, Decision, bounds, true, Feedback);
     }
 }
 

@@ -17,7 +17,7 @@ namespace TMBS.Core.Modes
             {
                 
                 
-                return ctx.WithSelection(false, -1);
+                return ctx.WithTile(null);
             }
 
             return ctx;

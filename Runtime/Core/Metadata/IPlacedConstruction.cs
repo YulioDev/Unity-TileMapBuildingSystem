@@ -1,10 +1,11 @@
 using UnityEngine;
+using UnityEngine.Tilemaps;
 
 namespace TMBS.Core.Metadata
 {
     public interface IPlacedConstruction
     {
-        int BuildableId { get; }
+        TileBase PlacedTile { get; }
         Vector3Int Cell { get; }
         BuildState State { get; }
     }

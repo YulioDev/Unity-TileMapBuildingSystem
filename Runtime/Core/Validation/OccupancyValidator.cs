@@ -5,24 +5,56 @@ using UnityEngine;
 
 namespace TMBS.Core.Validation
 {
+    public enum OccupancySourceMode
+    {
+        MetadataOnly,
+        TilemapOnly,
+        MetadataOrTilemap
+    }
+
     [Serializable]
-    public sealed class OccupancyValidator : IValidator, IInjectableValidator
+    public sealed class OccupancyValidator : IValidator, IInjectableValidator, IOccupancySourceInjectable
     {
         public bool allowOverwrite = false;
         public bool skipOccupiedCells = true;
         public bool markBlockedArea = true;
+        public bool validateAlternateBehaviour = false;
+        public OccupancySourceMode occupancySourceMode = OccupancySourceMode.MetadataOnly;
 
         [NonSerialized] private IMetadataStore _metadata;
+        [NonSerialized] private ICellOccupancySource _occupancySource;
 
         public void Inject(IMetadataStore metadata)
         {
             _metadata = metadata;
         }
 
+        public void InjectOccupancySource(ICellOccupancySource occupancySource)
+        {
+            _occupancySource = occupancySource;
+        }
+
+        private bool IsOccupied(Vector3Int cell)
+        {
+            bool metadataOccupied = _metadata != null && _metadata.TryGet(cell, out _);
+            bool tilemapOccupied = _occupancySource != null && _occupancySource.HasTile(cell);
+
+            switch (occupancySourceMode)
+            {
+                case OccupancySourceMode.MetadataOnly:
+                    return metadataOccupied;
+                case OccupancySourceMode.TilemapOnly:
+                    return tilemapOccupied;
+                case OccupancySourceMode.MetadataOrTilemap:
+                    return metadataOccupied || tilemapOccupied;
+                default:
+                    return metadataOccupied;
+            }
+        }
+
         public ValidationResult Validate(in PipelineContext ctx, ValidationMode mode)
         {
-            if (ctx.AlternateBehaviour) return ValidationResult.Valid;
-            if (_metadata == null) return ValidationResult.Valid;
+            if (ctx.AlternateBehaviour && !validateAlternateBehaviour) return ValidationResult.Valid;
 
             var opBounds = ValidationUtil.GetOperationBounds(in ctx);
 
@@ -51,7 +83,7 @@ namespace TMBS.Core.Validation
                                opBounds.position.z + (i / (opBounds.size.x * opBounds.size.y))
                            );
 
-                if (_metadata.TryGet(cell, out _))
+                if (IsOccupied(cell))
                 {
                     anyOccupied = true;
 
