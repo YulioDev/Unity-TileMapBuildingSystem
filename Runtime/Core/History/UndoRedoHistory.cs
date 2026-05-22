@@ -7,7 +7,17 @@ namespace TMBS.Core.History
         private readonly List<IImmediateCommand> _undo = new List<IImmediateCommand>(128);
         private readonly List<IImmediateCommand> _redo = new List<IImmediateCommand>(128);
 
-        public int Capacity { get; set; } = 256;
+        private int _capacity = 256;
+
+        public int Capacity
+        {
+            get => _capacity;
+            set
+            {
+                _capacity = value < 0 ? 0 : value;
+                Trim();
+            }
+        }
 
         public void Push(IImmediateCommand command)
         {

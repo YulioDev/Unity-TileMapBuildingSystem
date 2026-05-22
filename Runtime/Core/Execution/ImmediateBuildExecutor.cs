@@ -19,6 +19,7 @@ namespace TMBS.Core.Execution
         private readonly IEventBus _events;
         private readonly TileArrayBuilder _builder;
         private readonly float _sparseThreshold;
+        private readonly bool _emitRegionModifiedEvents;
 
         public ImmediateBuildExecutor(
             ITilemapWriteStrategy writer,
@@ -26,7 +27,8 @@ namespace TMBS.Core.Execution
             IUndoRedoHistory history,
             IEventBus events,
             TileArrayBuilder builder,
-            float sparseThreshold = 0.65f)
+            float sparseThreshold = 0.65f,
+            bool emitRegionModifiedEvents = true)
         {
             _writer = writer;
             _metadata = metadata;
@@ -34,6 +36,7 @@ namespace TMBS.Core.Execution
             _events = events;
             _builder = builder;
             _sparseThreshold = sparseThreshold;
+            _emitRegionModifiedEvents = emitRegionModifiedEvents;
         }
 
         public void Execute(in PipelineContext ctx, Tilemap targetTilemap)
@@ -163,6 +166,12 @@ namespace TMBS.Core.Execution
             }
 
             string instanceId = ctx.InstanceId;
+            System.Action<BoundsInt> onModified = null;
+            if (_emitRegionModifiedEvents)
+            {
+                onModified = b => _events.Publish(new RegionModifiedEvent(instanceId, b));
+            }
+
             var cmd = new PlaceTilesCommand(
                 _writer,
                 _metadata,
@@ -174,7 +183,7 @@ namespace TMBS.Core.Execution
                 afterMeta,
                 changes,
                 isSparse,
-                b => _events.Publish(new RegionModifiedEvent(instanceId, b))
+                onModified
             );
 
             _history.Push(cmd);

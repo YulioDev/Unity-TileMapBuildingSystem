@@ -47,9 +47,18 @@ namespace TMBS.Runtime.Facade
             input = inputAdapter;
             events = new SimpleEventBus();
             focus = new AlwaysFocusService();
-            int histCap = config.historyCapacity > 0 ? config.historyCapacity : 50;
+            
+            var historyConfig = config.history ?? new TmbsHistoryConfig();
+            if (historyConfig.enableUndoRedo)
+            {
+                history = new UndoRedoHistory { Capacity = historyConfig.capacity };
+            }
+            else
+            {
+                history = new NoUndoRedoHistory();
+            }
+
             int metaCap = config.metadataCapacity > 0 ? config.metadataCapacity : 1000;
-            history = new UndoRedoHistory { Capacity = histCap };
             metadata = new DefaultMetadataStore(metaCap);
 
             IGridSpace gridSpace = new UnityGridSpace(targetTilemap);
@@ -133,7 +142,8 @@ namespace TMBS.Runtime.Facade
             var batchWriter = new TilemapBatchWriter();
             var writeStrategy = new HybridTilemapWriteStrategy(batchWriter, config.sparseWriteDenseThreshold);
 
-            executor = new ImmediateBuildExecutor(writeStrategy, metadata, history, events, builder, config.sparseWriteDenseThreshold);
+            var emitEvents = config.history == null || config.history.emitRegionModifiedEvents;
+            executor = new ImmediateBuildExecutor(writeStrategy, metadata, history, events, builder, config.sparseWriteDenseThreshold, emitEvents);
         }
     }
 }

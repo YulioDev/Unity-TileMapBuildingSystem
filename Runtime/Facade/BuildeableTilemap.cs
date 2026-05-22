@@ -65,15 +65,91 @@ namespace TMBS.Runtime.Facade
                 return false;
             }
 
-            resolvedInput = inputAdapter as IBuildInputAdapter;
+            return TryResolveInputAdapter(out resolvedInput);
+        }
+
+        private bool TryResolveInputAdapter(out IBuildInputAdapter resolvedInput)
+        {
+            resolvedInput = null;
+
+            var inputConfig = rootConfig.input;
+
+            if (inputConfig == null || inputConfig.mode == TmbsInputMode.None)
+            {
+                return true;
+            }
+
+            switch (inputConfig.mode)
+            {
+                case TmbsInputMode.SceneProvided:
+                case TmbsInputMode.Legacy:
+                case TmbsInputMode.ModernInputSystem:
+                    resolvedInput = inputAdapter as IBuildInputAdapter;
+                    break;
+
+                case TmbsInputMode.DebugMouse:
+                    resolvedInput = ResolveOrCreateDebugMouseAdapter(inputConfig);
+                    break;
+
+                default:
+                    Debug.LogError($"TMBS: input mode no soportado: {inputConfig.mode}.", this);
+                    return false;
+            }
 
             if (resolvedInput == null)
             {
-                Debug.LogError("TMBS: inputAdapter no está asignado o no implementa IBuildInputAdapter.", this);
+                Debug.LogError($"TMBS: no se pudo resolver input adapter para modo {inputConfig.mode}.", this);
                 return false;
             }
 
-            return true;
+            return ValidateInputCapabilities(resolvedInput.Capabilities, inputConfig);
+        }
+
+        private IBuildInputAdapter ResolveOrCreateDebugMouseAdapter(TmbsInputConfig config)
+        {
+            var existing = GetComponent<TMBS.Unity.Input.LegacyMouseInputAdapter>();
+
+            if (existing != null)
+                return existing;
+
+            if (!config.autoCreateDebugInputAdapter)
+                return inputAdapter as IBuildInputAdapter;
+
+            return gameObject.AddComponent<TMBS.Unity.Input.LegacyMouseInputAdapter>();
+        }
+
+        private bool ValidateInputCapabilities(InputCapabilities capabilities, TmbsInputConfig config)
+        {
+            bool valid = true;
+
+            valid &= ValidateCapability(!config.requirePoint || capabilities.HasPoint, "Point", config);
+            valid &= ValidateCapability(!config.requireConfirm || capabilities.HasConfirm, "Confirm", config);
+            valid &= ValidateCapability(!config.requireCancel || capabilities.HasCancel, "Cancel", config);
+            valid &= ValidateCapability(!config.requireDrag || capabilities.HasDrag, "Drag", config);
+            valid &= ValidateCapability(!config.requireAlternateModifier || capabilities.HasAlternateModifier, "AlternateModifier", config);
+
+            if (rootConfig.history != null && rootConfig.history.enableUndoRedo)
+            {
+                valid &= ValidateCapability(!config.allowUndoInput || capabilities.HasUndo, "Undo", config);
+                valid &= ValidateCapability(!config.allowRedoInput || capabilities.HasRedo, "Redo", config);
+            }
+
+            return valid || !config.strictInputValidation;
+        }
+
+        private bool ValidateCapability(bool condition, string capabilityName, TmbsInputConfig config)
+        {
+            if (condition)
+                return true;
+
+            string message = $"TMBS: input adapter no cumple capacidad requerida: {capabilityName}.";
+
+            if (config.strictInputValidation)
+                Debug.LogError(message, this);
+            else
+                Debug.LogWarning(message, this);
+
+            return false;
         }
 
         private void OnEnable()
@@ -98,9 +174,9 @@ namespace TMBS.Runtime.Facade
                 _input.BuildIntentRaised += OnBuildIntent;
                 _input.Enable();
             }
-            else
+            else if (rootConfig.input != null && rootConfig.input.mode != TmbsInputMode.None)
             {
-                Debug.LogError("TMBS: Input Adapter is no asignado o no implementa IBuildInputAdapter.");
+                Debug.LogError("TMBS: Input Adapter no asignado o inválido.");
             }
 
             if (rootConfig != null && rootConfig.buildTile != null && _events != null)
@@ -122,7 +198,15 @@ namespace TMBS.Runtime.Facade
                 _input.BuildIntentRaised -= OnBuildIntent;
                 _input.Disable();
             }
+
             _preview?.Hide();
+
+            if (rootConfig != null &&
+                rootConfig.history != null &&
+                rootConfig.history.clearOnDisable)
+            {
+                _history?.Clear();
+            }
         }
 
         private void OnBuildSelectionChanged(BuildSelectionChangedEvent evt)
@@ -143,7 +227,10 @@ namespace TMBS.Runtime.Facade
             {
                 _pipeline?.CancelActiveOperation();
                 _preview?.Hide();
-                _history?.TryUndo();
+
+                if (rootConfig.history != null && rootConfig.history.enableUndoRedo)
+                    _history?.TryUndo();
+
                 return;
             }
 
@@ -151,7 +238,10 @@ namespace TMBS.Runtime.Facade
             {
                 _pipeline?.CancelActiveOperation();
                 _preview?.Hide();
-                _history?.TryRedo();
+
+                if (rootConfig.history != null && rootConfig.history.enableUndoRedo)
+                    _history?.TryRedo();
+
                 return;
             }
 
