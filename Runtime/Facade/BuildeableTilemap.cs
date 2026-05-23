@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using TMBS.Core.Catalog;
 using TMBS.Core.Events;
@@ -23,13 +24,35 @@ namespace TMBS.Runtime.Facade
     public sealed class BuildeableTilemap : MonoBehaviour
     {
         [Header("Configuration Asset")]
+        [Tooltip("The core configuration asset that defines rules, input, and performance settings.")]
         [SerializeField] private TmbsRootConfig rootConfig;
+        
+        [Tooltip("Unique identifier for this building instance. Used to route events correctly.")]
         [SerializeField] private string instanceId = "TMBS_Instance";
 
         [Header("Scene References")]
-        [SerializeField] private MonoBehaviour inputAdapter;
+        [Tooltip("The main tilemap where tiles will be placed.")]
         [SerializeField] private Tilemap targetTilemap;
+        
+        [Tooltip("A temporary tilemap used to render build previews and validation feedback.")]
         [SerializeField] private Tilemap previewTilemap;
+
+        [Tooltip("The world camera used to process pointer input. Overrides Camera.main if the root config policy allows it.")]
+        [SerializeField] private Camera worldCamera;
+
+        [Header("Discovery")]
+        [Tooltip("If enabled, any IValidator component attached to this GameObject will be automatically included in the validation pipeline.")]
+        [SerializeField] private bool includeAttachedSceneValidators = false;
+
+        private enum FacadeState
+        {
+            NotComposed,
+            Composing,
+            Composed,
+            Disabled
+        }
+
+        private FacadeState _state = FacadeState.NotComposed;
 
         private IBuildInputAdapter _input;
         private IBuildPipeline _pipeline;
@@ -43,25 +66,102 @@ namespace TMBS.Runtime.Facade
         private PreviewPolicyEvaluator _previewEvaluator;
         private IBuildMode _activeMode;
 
+        private IBuildInputAdapter _externalInputAdapter;
+        private IBuildInputAdapterProvider _externalInputProvider;
+        private bool _externalInputCreatedByProvider;
+        private bool _inputCreatedInternally;
+
+        private void Update()
+        {
+            if (_input is ITickableInputAdapter tickable)
+            {
+                tickable.Tick(Time.deltaTime);
+            }
+        }
+
+        private Camera ResolveCamera()
+        {
+            if (rootConfig == null) return Camera.main;
+
+            if (rootConfig.GetRuntimeCameraMode() == TmbsCameraMode.AlwaysMainCamera)
+                return Camera.main;
+
+            if (worldCamera == null)
+            {
+                Debug.LogWarning("TMBS: Camera Mode is set to UseFacadeReference but worldCamera is missing. Using Camera.main instead.", this);
+                return Camera.main;
+            }
+
+            return worldCamera;
+        }
+
+        public bool SetExternalInputAdapter(IBuildInputAdapter adapter)
+        {
+            if (_state == FacadeState.Composing || _state == FacadeState.Composed)
+            {
+                Debug.LogError("TMBS: SetExternalInputAdapter must be called before BuildeableTilemap is enabled.", this);
+                return false;
+            }
+
+            ReleaseExternalInputIfNeeded();
+
+            _externalInputAdapter = adapter;
+            _externalInputCreatedByProvider = false;
+
+            return true;
+        }
+
+        public bool SetExternalInputProvider(IBuildInputAdapterProvider provider)
+        {
+            if (_state == FacadeState.Composing || _state == FacadeState.Composed)
+            {
+                Debug.LogError("TMBS: SetExternalInputProvider must be called before BuildeableTilemap is enabled.", this);
+                return false;
+            }
+
+            ReleaseExternalInputIfNeeded();
+
+            _externalInputProvider = provider;
+            return true;
+        }
+
+        private void ReleaseExternalInputIfNeeded()
+        {
+            if (_externalInputAdapter == null)
+                return;
+
+            if (_externalInputCreatedByProvider && _externalInputProvider != null)
+            {
+                _externalInputProvider.ReleaseInputAdapter(_externalInputAdapter);
+            }
+            else if (_externalInputAdapter is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
+
+            _externalInputAdapter = null;
+            _externalInputCreatedByProvider = false;
+        }
+
         private bool TryValidateSerializedDependencies(out IBuildInputAdapter resolvedInput)
         {
             resolvedInput = null;
 
             if (rootConfig == null)
             {
-                Debug.LogError("TMBS: rootConfig no está asignado.", this);
+                Debug.LogError("TMBS: rootConfig is not assigned.", this);
                 return false;
             }
 
             if (targetTilemap == null)
             {
-                Debug.LogError("TMBS: targetTilemap no está asignado.", this);
+                Debug.LogError("TMBS: targetTilemap is not assigned.", this);
                 return false;
             }
 
             if (previewTilemap == null)
             {
-                Debug.LogError("TMBS: previewTilemap no está asignado.", this);
+                Debug.LogError("TMBS: previewTilemap is not assigned.", this);
                 return false;
             }
 
@@ -71,6 +171,7 @@ namespace TMBS.Runtime.Facade
         private bool TryResolveInputAdapter(out IBuildInputAdapter resolvedInput)
         {
             resolvedInput = null;
+            _inputCreatedInternally = false;
 
             var inputConfig = rootConfig.input;
 
@@ -81,41 +182,75 @@ namespace TMBS.Runtime.Facade
 
             switch (inputConfig.mode)
             {
-                case TmbsInputMode.SceneProvided:
-                case TmbsInputMode.Legacy:
-                case TmbsInputMode.ModernInputSystem:
-                    resolvedInput = inputAdapter as IBuildInputAdapter;
+                case TmbsInputMode.ExternalProvided:
+                    resolvedInput = ResolveExternalInputAdapter();
                     break;
 
-                case TmbsInputMode.DebugMouse:
-                    resolvedInput = ResolveOrCreateDebugMouseAdapter(inputConfig);
+                case TmbsInputMode.Mouse:
+                    resolvedInput = CreateLegacyMouseInputAdapter();
+                    _inputCreatedInternally = true;
                     break;
 
                 default:
-                    Debug.LogError($"TMBS: input mode no soportado: {inputConfig.mode}.", this);
+                    Debug.LogError($"TMBS: Input mode {inputConfig.mode} is not supported.", this);
                     return false;
             }
 
             if (resolvedInput == null)
             {
-                Debug.LogError($"TMBS: no se pudo resolver input adapter para modo {inputConfig.mode}.", this);
+                Debug.LogError($"TMBS: Failed to create input adapter for mode {inputConfig.mode}.", this);
                 return false;
             }
 
             return ValidateInputCapabilities(resolvedInput.Capabilities, inputConfig);
         }
 
-        private IBuildInputAdapter ResolveOrCreateDebugMouseAdapter(TmbsInputConfig config)
+        private IBuildInputAdapter CreateLegacyMouseInputAdapter()
         {
-            var existing = GetComponent<TMBS.Unity.Input.LegacyMouseInputAdapter>();
+            return new TMBS.Unity.Input.LegacyMouseBuildInputAdapter(ResolveCamera);
+        }
 
-            if (existing != null)
-                return existing;
+        private IBuildInputAdapter ResolveExternalInputAdapter()
+        {
+            if (_externalInputAdapter != null)
+                return _externalInputAdapter;
 
-            if (!config.autoCreateDebugInputAdapter)
-                return inputAdapter as IBuildInputAdapter;
+            if (_externalInputProvider != null &&
+                _externalInputProvider.TryCreateInputAdapter(
+                    new TMBS.Core.Input.BuildInputAdapterContext(instanceId),
+                    out var adapter))
+            {
+                _externalInputAdapter = adapter;
+                _externalInputCreatedByProvider = true;
+                return adapter;
+            }
 
-            return gameObject.AddComponent<TMBS.Unity.Input.LegacyMouseInputAdapter>();
+            Debug.LogError("TMBS: ExternalProvided requires SetExternalInputAdapter or SetExternalInputProvider to be called before OnEnable.", this);
+            return null;
+        }
+
+        private string GetSafeObjectName()
+        {
+            return gameObject != null && !string.IsNullOrEmpty(gameObject.name)
+                ? gameObject.name
+                : "[Unnamed GameObject]";
+        }
+
+        private List<MonoBehaviour> ResolveAttachedSceneValidators()
+        {
+            if (!includeAttachedSceneValidators)
+                return null;
+
+            var behaviours = GetComponents<MonoBehaviour>();
+            var validators = new List<MonoBehaviour>();
+
+            for (int i = 0; i < behaviours.Length; i++)
+            {
+                if (behaviours[i] is IValidator)
+                    validators.Add(behaviours[i]);
+            }
+
+            return validators.Count > 0 ? validators : null;
         }
 
         private bool ValidateInputCapabilities(InputCapabilities capabilities, TmbsInputConfig config)
@@ -142,7 +277,7 @@ namespace TMBS.Runtime.Facade
             if (condition)
                 return true;
 
-            string message = $"TMBS: input adapter no cumple capacidad requerida: {capabilityName}.";
+            string message = $"TMBS: Input adapter does not meet required capability: {capabilityName}.";
 
             if (config.strictInputValidation)
                 Debug.LogError(message, this);
@@ -154,14 +289,17 @@ namespace TMBS.Runtime.Facade
 
         private void OnEnable()
         {
+            _state = FacadeState.Composing;
+
             if (!TryValidateSerializedDependencies(out var resolvedInput))
             {
+                _state = FacadeState.Disabled;
                 enabled = false;
                 return;
             }
 
             var composition = new TmbsCompositionRoot();
-            composition.Compose(this, rootConfig, instanceId, resolvedInput, targetTilemap, previewTilemap, null,
+            composition.Compose(this, rootConfig, instanceId, resolvedInput, targetTilemap, previewTilemap, ResolveAttachedSceneValidators(),
                 out _input, out _pipeline, out _events, out _focus, out _history, out _metadata, out _preview, out _tileSelectionState, out _executor, out _previewEvaluator, out _activeMode);
             
             if (_events != null)
@@ -176,7 +314,7 @@ namespace TMBS.Runtime.Facade
             }
             else if (rootConfig.input != null && rootConfig.input.mode != TmbsInputMode.None)
             {
-                Debug.LogError("TMBS: Input Adapter no asignado o inválido.");
+                Debug.LogError("TMBS: Input Adapter is unassigned or invalid.", this);
             }
 
             if (rootConfig != null && rootConfig.buildTile != null && _events != null)
@@ -189,6 +327,8 @@ namespace TMBS.Runtime.Facade
 
                 _events.Publish(new BuildSelectionChangedEvent(instanceId, initial));
             }
+
+            _state = FacadeState.Composed;
         }
 
         private void OnDisable()
@@ -197,6 +337,15 @@ namespace TMBS.Runtime.Facade
             {
                 _input.BuildIntentRaised -= OnBuildIntent;
                 _input.Disable();
+
+                if ((_inputCreatedInternally || _externalInputCreatedByProvider) && 
+                    _input is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+
+                _input = null;
+                _inputCreatedInternally = false;
             }
 
             _preview?.Hide();
@@ -207,6 +356,10 @@ namespace TMBS.Runtime.Facade
             {
                 _history?.Clear();
             }
+
+            ReleaseExternalInputIfNeeded();
+
+            _state = FacadeState.Disabled;
         }
 
         private void OnBuildSelectionChanged(BuildSelectionChangedEvent evt)

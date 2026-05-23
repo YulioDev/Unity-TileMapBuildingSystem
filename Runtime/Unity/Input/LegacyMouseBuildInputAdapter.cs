@@ -5,42 +5,62 @@ using UnityEngine;
 
 namespace TMBS.Unity.Input
 {
-    public class LegacyMouseInputAdapter : MonoBehaviour, IBuildInputAdapter
+    public sealed class LegacyMouseBuildInputAdapter : ITickableInputAdapter
     {
-        public InputCapabilities Capabilities => new InputCapabilities(
-            hasPoint: true, hasConfirm: true, hasCancel: true, 
-            hasDrag: true, hasUndo: true, hasRedo: true, 
-            hasPipette: false, hasAlternateModifier: true);
-
-        public event Action<BuildIntent> BuildIntentRaised;
-
+        private readonly Func<Camera> _cameraProvider;
         private bool _isActive;
         private bool _isDragging;
         private bool _dragAlternate;
-        private Camera _mainCamera;
 
-        public void Enable() 
+        public LegacyMouseBuildInputAdapter(Func<Camera> cameraProvider)
+        {
+            _cameraProvider = cameraProvider ?? (() => Camera.main);
+        }
+
+        public InputCapabilities Capabilities => new InputCapabilities(
+            hasPoint: true,
+            hasConfirm: true,
+            hasCancel: true,
+            hasDrag: true,
+            hasUndo: true,
+            hasRedo: true,
+            hasPipette: false,
+            hasAlternateModifier: true);
+
+        public event Action<BuildIntent> BuildIntentRaised;
+
+        public void Enable()
         {
             _isActive = true;
-            _mainCamera = Camera.main;
         }
-        
-        public void Disable() 
+
+        public void Disable()
         {
             _isActive = false;
             _isDragging = false;
             _dragAlternate = false;
         }
 
-        private void Update()
+        public void Tick(float deltaTime)
         {
-            if (!_isActive || _mainCamera == null) return;
+            if (!_isActive)
+                return;
 
-            Vector3 mouseWorldPos = _mainCamera.ScreenToWorldPoint(UnityEngine.Input.mousePosition);
-            mouseWorldPos.z = 0f; 
+            var camera = _cameraProvider();
 
-            bool isAlternate = UnityEngine.Input.GetKey(KeyCode.LeftShift) || UnityEngine.Input.GetKey(KeyCode.RightShift);
-            bool isCtrl = UnityEngine.Input.GetKey(KeyCode.LeftControl) || UnityEngine.Input.GetKey(KeyCode.RightControl);
+            if (camera == null)
+                return;
+
+            Vector3 mouseWorldPos = camera.ScreenToWorldPoint(UnityEngine.Input.mousePosition);
+            mouseWorldPos.z = 0f;
+
+            bool isAlternate =
+                UnityEngine.Input.GetKey(KeyCode.LeftShift) ||
+                UnityEngine.Input.GetKey(KeyCode.RightShift);
+
+            bool isCtrl =
+                UnityEngine.Input.GetKey(KeyCode.LeftControl) ||
+                UnityEngine.Input.GetKey(KeyCode.RightControl);
 
             if (isCtrl && UnityEngine.Input.GetKeyDown(KeyCode.Z))
             {
@@ -48,6 +68,7 @@ namespace TMBS.Unity.Input
                     BuildIntentRaised?.Invoke(new BuildIntent(BuildIntentType.Redo, mouseWorldPos, false));
                 else
                     BuildIntentRaised?.Invoke(new BuildIntent(BuildIntentType.Undo, mouseWorldPos, false));
+
                 return;
             }
 
@@ -56,7 +77,7 @@ namespace TMBS.Unity.Input
                 BuildIntentRaised?.Invoke(new BuildIntent(BuildIntentType.Redo, mouseWorldPos, false));
                 return;
             }
-            
+
             if (UnityEngine.Input.GetMouseButtonDown(1))
             {
                 _isDragging = false;
@@ -64,7 +85,6 @@ namespace TMBS.Unity.Input
                 return;
             }
 
-            
             if (UnityEngine.Input.GetMouseButtonDown(0))
             {
                 _isDragging = true;
@@ -82,7 +102,6 @@ namespace TMBS.Unity.Input
                 BuildIntentRaised?.Invoke(new BuildIntent(BuildIntentType.Confirm, mouseWorldPos, _dragAlternate));
                 _dragAlternate = false;
             }
-            
             else if (!_isDragging)
             {
                 BuildIntentRaised?.Invoke(new BuildIntent(BuildIntentType.PointMove, mouseWorldPos, isAlternate));
@@ -90,4 +109,3 @@ namespace TMBS.Unity.Input
         }
     }
 }
-
