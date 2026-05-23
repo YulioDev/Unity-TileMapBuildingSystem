@@ -1,192 +1,120 @@
-using TMBS.Core.Catalog;
+using System;
+using System.Collections.Generic;
 using TMBS.Core.Events;
 using TMBS.Core.History;
 using TMBS.Core.Metadata;
 using TMBS.Core.Pipeline;
-using TMBS.Core.Validation;
 using TMBS.Unity.Tilemaps;
 using UnityEngine;
 using UnityEngine.Tilemaps;
-using System.Collections.Generic;
 
 namespace TMBS.Core.Execution
 {
     public sealed class ImmediateBuildExecutor
     {
-        private readonly ITilemapWriteStrategy _writer;
+        private readonly TilemapBatchWriter _writer;
         private readonly IMetadataStore _metadata;
         private readonly IUndoRedoHistory _history;
         private readonly IEventBus _events;
-        private readonly TileArrayBuilder _builder;
-        private readonly float _sparseThreshold;
         private readonly bool _emitRegionModifiedEvents;
 
         public ImmediateBuildExecutor(
-            ITilemapWriteStrategy writer,
+            TilemapBatchWriter writer,
             IMetadataStore metadata,
             IUndoRedoHistory history,
             IEventBus events,
-            TileArrayBuilder builder,
-            float sparseThreshold = 0.65f,
-            bool emitRegionModifiedEvents = true)
+            bool emitRegionModifiedEvents)
         {
             _writer = writer;
             _metadata = metadata;
             _history = history;
             _events = events;
-            _builder = builder;
-            _sparseThreshold = sparseThreshold;
             _emitRegionModifiedEvents = emitRegionModifiedEvents;
         }
 
         public void Execute(in PipelineContext ctx, Tilemap targetTilemap)
         {
-            if (targetTilemap == null) return;
-            if (!ctx.HasSelection && !ctx.AlternateBehaviour) return;
-
-            TileBase targetTile = null;
-
-            if (!ctx.AlternateBehaviour)
+            if (targetTilemap == null)
             {
-                targetTile = ctx.SelectedTile;
-                if (targetTile == null) return;
+                Debug.LogError("TMBS: Cannot execute build. targetTilemap is null.");
+                return;
             }
 
-            var bounds = ctx.HasDragBounds
-                ? ctx.DragBounds
-                : new BoundsInt(ctx.Cell, new Vector3Int(1, 1, 1));
+            var bounds = ctx.HasDragBounds ? ctx.DragBounds : new BoundsInt(ctx.Cell, Vector3Int.one);
+            var writeMask = ctx.Decision.WriteMask ?? TMBS.Core.Validation.CellMask.AllTrue(bounds);
 
-            var writeMask = ctx.FullValidation.WriteMask;
-            bool isSparse = false;
+            if (!writeMask.AnyTrue())
+                return;
             
-            if (writeMask != null)
+            var expectedSize = writeMask.Bounds.size;
+            if (bounds.size != expectedSize)
             {
-                if (writeMask.Bounds.position != bounds.position || writeMask.Bounds.size != bounds.size)
-                {
-                    Debug.LogError("TMBS: WriteMask bounds mismatch. Aborting execution to prevent corrupted writes.");
-                    return;
-                }
-                int expectedLen = bounds.size.x * bounds.size.y * bounds.size.z;
-                if (writeMask.Bits == null || writeMask.Bits.Length != expectedLen)
-                {
-                    Debug.LogError("TMBS: WriteMask length mismatch. Aborting execution.");
-                    return;
-                }
-
-                int writable = 0;
-                for (int i = 0; i < writeMask.Bits.Length; i++)
-                {
-                    if (writeMask.Bits[i]) writable++;
-                }
-                float density = writable / (float)writeMask.Bits.Length;
-                isSparse = density < _sparseThreshold;
+                Debug.LogError("TMBS: WriteMask bounds mismatch. Aborting execution to prevent corrupted writes.");
+                return;
             }
 
-            TileBase[] beforeTiles = null;
-            TileBase[] afterTiles = null;
-            BuildRecord?[] beforeMeta = null;
-            BuildRecord?[] afterMeta = null;
-            TileChange[] changes = null;
-
-            int len = bounds.size.x * bounds.size.y * bounds.size.z;
-
-            if (isSparse)
+            int trueCount = 0;
+            for (int i = 0; i < writeMask.Bits.Length; i++)
             {
-                var changeList = new List<TileChange>();
-                for (int i = 0; i < writeMask.Bits.Length; i++)
+                if (writeMask.Bits[i])
                 {
-                    if (!writeMask.Bits[i]) continue;
-
-                    Vector3Int cell = writeMask.CellAt(i);
-                    TileBase before = targetTilemap.GetTile(cell);
-                    TileBase after = targetTile;
-                    
-                    BuildRecord? bMeta = null;
-                    BuildRecord? aMeta = null;
-
-                    if (_metadata != null)
-                    {
-                        if (_metadata.TryGet(cell, out var rec))
-                            bMeta = rec;
-                            
-                        if (after != null)
-                            aMeta = new BuildRecord(ctx.SelectedTile, cell, BuildState.Completed);
-                    }
-
-                    changeList.Add(new TileChange(cell, before, after, bMeta, aMeta));
+                    trueCount++;
                 }
-                changes = changeList.ToArray();
             }
-            else
-            {
-                beforeTiles = _builder.ReadBlock(targetTilemap, bounds);
-                afterTiles = _builder.FillBlock(bounds, targetTile);
 
-                if (writeMask != null)
+            var changesList = new List<TileChange>(trueCount);
+
+            for (int z = 0; z < bounds.size.z; z++)
+            {
+                for (int y = 0; y < bounds.size.y; y++)
                 {
-                    for (int i = 0; i < len; i++)
+                    for (int x = 0; x < bounds.size.x; x++)
                     {
-                        if (!writeMask.Bits[i])
+                        var cell = bounds.position + new Vector3Int(x, y, z);
+                        
+                        if (writeMask.Bits[writeMask.IndexOf(cell)])
                         {
-                            afterTiles[i] = beforeTiles[i];
+                            var beforeTile = targetTilemap.GetTile(cell);
+                            var afterTile = ctx.AlternateBehaviour ? ctx.Decision.AlternateWriteTile : ctx.Decision.WriteTile;
+
+                            BuildRecord? beforeMeta = null;
+                            if (_metadata != null && _metadata.TryGet(cell, out var record))
+                            {
+                                beforeMeta = record;
+                            }
+
+                            BuildRecord? afterMeta = null;
+                            if (afterTile != null && ctx.Decision.ConstructionId > 0)
+                            {
+                                afterMeta = new BuildRecord(
+                                    afterTile,
+                                    cell,
+                                    BuildState.Completed);
+                            }
+
+                            changesList.Add(new TileChange(cell, beforeTile, afterTile, beforeMeta, afterMeta));
                         }
                     }
                 }
-
-                if (_metadata != null)
-                {
-                    beforeMeta = new BuildRecord?[len];
-                    afterMeta = new BuildRecord?[len];
-
-                    for (int i = 0; i < len; i++)
-                    {
-                        Vector3Int cell = (writeMask != null)
-                            ? writeMask.CellAt(i)
-                            : TMBS.Core.Grid.TileBlockIndex.CellAt(bounds, i);
-
-                        if (_metadata.TryGet(cell, out var rec))
-                            beforeMeta[i] = rec;
-                        else
-                            beforeMeta[i] = null;
-
-                        bool canWrite = writeMask == null || writeMask.Bits[i];
-
-                        if (!canWrite)
-                        {
-                            afterMeta[i] = beforeMeta[i];
-                            continue;
-                        }
-
-                        if (afterTiles[i] == null)
-                            afterMeta[i] = null;
-                        else
-                            afterMeta[i] = new BuildRecord(ctx.SelectedTile, cell, BuildState.Completed);
-                    }
-                }
             }
 
-            string instanceId = ctx.InstanceId;
-            System.Action<BoundsInt> onModified = null;
-            if (_emitRegionModifiedEvents)
-            {
-                onModified = b => _events.Publish(new RegionModifiedEvent(instanceId, b));
-            }
+            var changes = changesList.ToArray();
+            var instanceId = ctx.InstanceId;
 
-            var cmd = new PlaceTilesCommand(
-                _writer,
-                _metadata,
+            var command = new PlaceTilesCommand(
                 targetTilemap,
-                bounds,
-                beforeTiles,
-                afterTiles,
-                beforeMeta,
-                afterMeta,
+                _writer,
                 changes,
-                isSparse,
-                onModified
-            );
+                _metadata,
+                bounds,
+                _emitRegionModifiedEvents ? (b) => NotifyRegionModified(instanceId, b) : (Action<BoundsInt>)null);
 
-            _history.Push(cmd);
+            _history?.Push(command);
+        }
+
+        private void NotifyRegionModified(string instanceId, BoundsInt bounds)
+        {
+            _events?.Publish(new RegionModifiedEvent(instanceId, bounds));
         }
     }
 }

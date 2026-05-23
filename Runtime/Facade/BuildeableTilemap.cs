@@ -299,8 +299,26 @@ namespace TMBS.Runtime.Facade
             }
 
             var composition = new TmbsCompositionRoot();
-            composition.Compose(this, rootConfig, instanceId, resolvedInput, targetTilemap, previewTilemap, ResolveAttachedSceneValidators(),
-                out _input, out _pipeline, out _events, out _focus, out _history, out _metadata, out _preview, out _tileSelectionState, out _executor, out _previewEvaluator, out _activeMode);
+            var context = composition.Compose(
+                this, 
+                rootConfig, 
+                instanceId, 
+                resolvedInput, 
+                targetTilemap, 
+                previewTilemap, 
+                ResolveAttachedSceneValidators());
+                
+            _input = context.Input;
+            _pipeline = context.Pipeline;
+            _events = context.Events;
+            _focus = context.Focus;
+            _history = context.History;
+            _metadata = context.Metadata;
+            _preview = context.Preview;
+            _tileSelectionState = context.SelectionState;
+            _executor = context.Executor;
+            _previewEvaluator = context.PreviewEvaluator;
+            _activeMode = context.ActiveMode;
             
             if (_events != null)
             {

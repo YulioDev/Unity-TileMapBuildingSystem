@@ -38,6 +38,9 @@ namespace TMBS.Runtime.Config
         [Tooltip("Configures Undo/Redo capabilities and history retention.")]
         public TmbsHistoryConfig history = new TmbsHistoryConfig();
 
+        [SerializeField, HideInInspector]
+        private int historyCapacity = -1;
+
         [Header("Metadata")]
         [Tooltip("Maximum number of build records the system can store in memory.")]
         [Min(0)]
@@ -60,10 +63,15 @@ namespace TMBS.Runtime.Config
         {
             var source = history ?? new TmbsHistoryConfig();
 
+            int resolvedCapacity = source.capacity;
+
+            if (historyCapacity > 0 && source.capacity <= 0)
+                resolvedCapacity = historyCapacity;
+
             return new TmbsHistoryConfig
             {
                 enableUndoRedo = source.enableUndoRedo,
-                capacity = Mathf.Max(0, source.capacity),
+                capacity = Mathf.Max(0, resolvedCapacity),
                 clearOnDisable = source.clearOnDisable,
                 emitRegionModifiedEvents = source.emitRegionModifiedEvents
             };
