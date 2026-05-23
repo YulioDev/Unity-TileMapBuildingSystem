@@ -13,12 +13,29 @@ MonoBehaviour:
   m_Name: root
   m_EditorClassIdentifier: Assembly-CSharp::TMBS.Runtime.Config.TmbsRootConfig
   executionMode: 0
+  input:
+    mode: 1
+    strictInputValidation: 0
+    requirePoint: 1
+    requireConfirm: 1
+    requireCancel: 1
+    requireDrag: 1
+    requireAlternateModifier: 1
+    allowUndoInput: 1
+    allowRedoInput: 1
+  cameraMode: 0
   previewPolicy: 2
   buildTile: {fileID: 11400000, guid: 180f55a6f11b7d54e828326e9f02054a, type: 2}
   previewValidTile: {fileID: 11400000, guid: 2e015b42f4c8fdd4ba88a7f8d2ab743b, type: 2}
   previewInvalidTile: {fileID: 11400000, guid: 50202cb830faae04ba588237a9a8923b, type: 2}
-  historyCapacity: 256
+  history:
+    enableUndoRedo: 1
+    capacity: 256
+    clearOnDisable: 0
+    emitRegionModifiedEvents: 1
   metadataCapacity: 4096
+  sparseWriteDenseThreshold: 0.65
+  clampDragBoundsToBoundsValidator: 0
   validators:
   - enabled: 1
     validator:
@@ -38,6 +55,8 @@ MonoBehaviour:
         allowOverwrite: 0
         skipOccupiedCells: 1
         markBlockedArea: 1
+        validateAlternateBehaviour: 0
+        occupancySourceMode: 0
     - rid: 7190439193056116805
       type: {class: SelectionValidator, ns: TMBS.Core.Validation, asm: Assembly-CSharp}
       data:
@@ -50,3 +69,4 @@ MonoBehaviour:
           m_Size: {x: 15, y: 15, z: 1}
         allowPartialPlacement: 1
         markBlockedArea: 1
+        validateAlternateBehaviour: 1

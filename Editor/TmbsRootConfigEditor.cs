@@ -27,7 +27,6 @@ public class TmbsRootConfigEditor : Editor
             var element = prop.GetArrayElementAtIndex(index);
             var validatorProp = element.FindPropertyRelative("validator");
             
-            // La altura dinámica de la propiedad según esté plegada (foldout) o desplegada, más algo de padding.
             float propertyHeight = EditorGUI.GetPropertyHeight(validatorProp, true);
             return propertyHeight + 4f;
         };
@@ -39,7 +38,6 @@ public class TmbsRootConfigEditor : Editor
             var enabledProp = element.FindPropertyRelative("enabled");
             var validatorProp = element.FindPropertyRelative("validator");
 
-            // Extraer el nombre de la clase instanciada para ponerla como título del foldout
             string typeName = "Empty";
             if (!string.IsNullOrEmpty(validatorProp.managedReferenceFullTypename))
             {
@@ -60,7 +58,7 @@ public class TmbsRootConfigEditor : Editor
                 propRect,
                 validatorProp,
                 new GUIContent(typeName),
-                true); // includeChildren = true
+                true); 
         };
 
         _list.onAddDropdownCallback = (rect, list) =>
@@ -96,7 +94,6 @@ public class TmbsRootConfigEditor : Editor
     {
         serializedObject.Update();
 
-        // Iteramos manualmente las propiedades para NO dibujar 'validators' duplicado
         SerializedProperty iterator = serializedObject.GetIterator();
         bool enterChildren = true;
         while (iterator.NextVisible(enterChildren))
@@ -118,9 +115,40 @@ public class TmbsRootConfigEditor : Editor
 
         EditorGUILayout.Space();
         
-        // Dibujamos nuestra ReorderableList custom
+        DrawInputModeHelp();
+
+        EditorGUILayout.Space();
+        
         _list.DoLayoutList();
 
         serializedObject.ApplyModifiedProperties();
+    }
+
+    private void DrawInputModeHelp()
+    {
+        var inputProp = serializedObject.FindProperty("input");
+        if (inputProp == null)
+            return;
+
+        var modeProp = inputProp.FindPropertyRelative("mode");
+        if (modeProp == null)
+            return;
+
+        var mode = (TmbsInputMode)modeProp.enumValueIndex;
+
+        switch (mode)
+        {
+            case TmbsInputMode.Mouse:
+                EditorGUILayout.HelpBox(
+                    "Mouse: Uses the built-in mouse/keyboard adapter. Works out-of-the-box.",
+                    MessageType.Info);
+                break;
+
+            case TmbsInputMode.ExternalProvided:
+                EditorGUILayout.HelpBox(
+                    "ExternalProvided: Requires manual injection via SetExternalInputAdapter before enabling the component.",
+                    MessageType.Info);
+                break;
+        }
     }
 }

@@ -13,15 +13,14 @@ namespace TMBS.Unity.Tilemaps
         {
             if (tilemap == null)
             {
-                Debug.LogError("TMBS: Tilemap nulo en WriteBlock.");
+                Debug.LogError("TMBS: Tilemap is null in WriteBlock.");
                 return;
             }
 
             int expected = bounds.size.x * bounds.size.y * bounds.size.z;
-
-            if (expected < 0 || tiles == null || tiles.Length != expected)
+            if (tiles == null || tiles.Length != expected)
             {
-                Debug.LogError($"TMBS: Tile array inválido. Expected={expected}, Actual={tiles?.Length ?? -1}");
+                Debug.LogError($"TMBS: Invalid tile array length. Expected={expected}, Actual={tiles?.Length ?? -1}");
                 return;
             }
 
@@ -29,4 +28,3 @@ namespace TMBS.Unity.Tilemaps
         }
     }
 }
-

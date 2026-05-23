@@ -14,8 +14,8 @@ namespace TMBS.Unity.Preview
         private bool _hasLast;
         private TileBase _lastTile;
 
-        private TileBase[] _buffer;     // para pintar
-        private TileBase[] _clearBuffer; // para limpiar (todo null)
+        private TileBase[] _buffer;     
+        private TileBase[] _clearBuffer; 
 
         public TilemapPreviewRenderer(Tilemap tilemap, TileBase valid, TileBase invalid)
         {
@@ -68,7 +68,7 @@ namespace TMBS.Unity.Preview
 
             for (int i = 0; i < len; i++)
             {
-                // Mismo orden que CellMask: x rápido
+                
                 Vector3Int pos = CellAt(fullArea, i);
                 bool isBlocked = sameBounds
                     ? blockedMask.Bits[i]
@@ -80,7 +80,7 @@ namespace TMBS.Unity.Preview
             _tilemap.SetTilesBlock(fullArea, _buffer);
             _last = fullArea;
             _hasLast = true;
-            _lastTile = null; // mezclado
+            _lastTile = null; 
         }
 
         public void Hide()
@@ -96,7 +96,7 @@ namespace TMBS.Unity.Preview
             int len = Volume(_last);
             EnsureClearBuffer(len);
             
-            // _clearBuffer es todo null; SetTilesBlock borra el bloque.
+            
             _tilemap.SetTilesBlock(_last, _clearBuffer);
             _hasLast = false;
         }
@@ -130,10 +130,10 @@ namespace TMBS.Unity.Preview
         {
             if (_clearBuffer == null || _clearBuffer.Length != len)
             {
-                _clearBuffer = new TileBase[len]; // ya inicializa a null
+                _clearBuffer = new TileBase[len]; 
                 return;
             }
-            // Solo limpiar si reutilizamos el mismo buffer
+            
             System.Array.Clear(_clearBuffer, 0, len);
         }
 
