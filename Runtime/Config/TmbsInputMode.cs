@@ -2,10 +2,8 @@ namespace TMBS.Runtime.Config
 {
     public enum TmbsInputMode
     {
-        None,
-        SceneProvided,
-        DebugMouse,
-        Legacy,
-        ModernInputSystem
+        None = 0,
+        Mouse = 1,
+        ExternalProvided = 2
     }
 }
