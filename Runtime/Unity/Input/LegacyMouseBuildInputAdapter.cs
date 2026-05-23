@@ -8,13 +8,15 @@ namespace TMBS.Unity.Input
     public sealed class LegacyMouseBuildInputAdapter : ITickableInputAdapter
     {
         private readonly Func<Camera> _cameraProvider;
+        private readonly System.Func<UnityEngine.Plane> _constructionPlaneProvider;
         private bool _isActive;
         private bool _isDragging;
         private bool _dragAlternate;
 
-        public LegacyMouseBuildInputAdapter(Func<Camera> cameraProvider)
+        public LegacyMouseBuildInputAdapter(Func<Camera> cameraProvider, System.Func<UnityEngine.Plane> constructionPlaneProvider = null)
         {
             _cameraProvider = cameraProvider ?? (() => Camera.main);
+            _constructionPlaneProvider = constructionPlaneProvider ?? (() => new UnityEngine.Plane(Vector3.back, Vector3.zero));
         }
 
         public InputCapabilities Capabilities => new InputCapabilities(
@@ -51,8 +53,20 @@ namespace TMBS.Unity.Input
             if (camera == null)
                 return;
 
-            Vector3 mouseWorldPos = camera.ScreenToWorldPoint(UnityEngine.Input.mousePosition);
-            mouseWorldPos.z = 0f;
+            Vector3 mouseWorldPos;
+
+            var ray = camera.ScreenPointToRay(UnityEngine.Input.mousePosition);
+            var plane = _constructionPlaneProvider();
+            if (plane.Raycast(ray, out var enter))
+            {
+                mouseWorldPos = ray.GetPoint(enter);
+            }
+            else
+            {
+                // Fallback to previous behavior if raycast fails
+                mouseWorldPos = camera.ScreenToWorldPoint(UnityEngine.Input.mousePosition);
+                mouseWorldPos.z = 0f;
+            }
 
             bool isAlternate =
                 UnityEngine.Input.GetKey(KeyCode.LeftShift) ||

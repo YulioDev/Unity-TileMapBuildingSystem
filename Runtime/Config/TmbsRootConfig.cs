@@ -63,15 +63,10 @@ namespace TMBS.Runtime.Config
         {
             var source = history ?? new TmbsHistoryConfig();
 
-            int resolvedCapacity = source.capacity;
-
-            if (historyCapacity > 0 && source.capacity <= 0)
-                resolvedCapacity = historyCapacity;
-
             return new TmbsHistoryConfig
             {
                 enableUndoRedo = source.enableUndoRedo,
-                capacity = Mathf.Max(0, resolvedCapacity),
+                capacity = Mathf.Max(0, source.capacity),
                 clearOnDisable = source.clearOnDisable,
                 emitRegionModifiedEvents = source.emitRegionModifiedEvents
             };
@@ -104,6 +99,15 @@ namespace TMBS.Runtime.Config
 
             if (history == null)
                 history = new TmbsHistoryConfig();
+            // Migrate legacy historyCapacity if present. This ensures old assets are migrated in the editor
+            // but prevents runtime getters from mutating assets.
+            if (historyCapacity > 0)
+            {
+                if (history.capacity <= 0)
+                    history.capacity = historyCapacity;
+
+                historyCapacity = -1;
+            }
 
             history.capacity = Mathf.Max(0, history.capacity);
             metadataCapacity = Mathf.Max(0, metadataCapacity);

@@ -35,7 +35,7 @@ namespace TMBS.Runtime.Facade
         {
             var input = inputAdapter;
             var events = new SimpleEventBus();
-            var focus = new AlwaysFocusService();
+            var focus = (IInputFocusService)new TMBS.Unity.Input.UiFocusGuardService();
             
             var historyConfig = config.GetRuntimeHistoryConfig();
             IUndoRedoHistory history;
