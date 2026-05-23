@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using TMBS.Core.Catalog;
 using TMBS.Core.Events;
 using TMBS.Core.Execution;
 using TMBS.Core.Focus;

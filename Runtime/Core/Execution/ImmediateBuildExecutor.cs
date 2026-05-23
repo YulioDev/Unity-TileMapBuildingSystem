@@ -12,20 +12,17 @@ namespace TMBS.Core.Execution
 {
     public sealed class ImmediateBuildExecutor
     {
-        private readonly TilemapBatchWriter _writer;
         private readonly IMetadataStore _metadata;
         private readonly IUndoRedoHistory _history;
         private readonly IEventBus _events;
         private readonly bool _emitRegionModifiedEvents;
 
         public ImmediateBuildExecutor(
-            TilemapBatchWriter writer,
             IMetadataStore metadata,
             IUndoRedoHistory history,
             IEventBus events,
             bool emitRegionModifiedEvents)
         {
-            _writer = writer;
             _metadata = metadata;
             _history = history;
             _events = events;
@@ -103,7 +100,6 @@ namespace TMBS.Core.Execution
 
             var command = new PlaceTilesCommand(
                 targetTilemap,
-                _writer,
                 changes,
                 _metadata,
                 bounds,

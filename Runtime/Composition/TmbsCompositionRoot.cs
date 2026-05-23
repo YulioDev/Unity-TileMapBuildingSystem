@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using TMBS.Core.Catalog;
 using TMBS.Core.Events;
 using TMBS.Core.Execution;
 using TMBS.Core.Focus;
@@ -53,11 +52,7 @@ namespace TMBS.Runtime.Facade
 
             IGridSpace gridSpace = new UnityGridSpace(targetTilemap);
 
-            var catalog = new DefaultBuildableCatalog();
-            if (config.buildTile != null)
-            {
-                catalog.Register(new BuildableDefinition(1, "DefaultWall", config.buildTile));
-            }
+            // Catalog creation removed: not used in current composition flow
 
             var tileSelectionState = new TileSelectionState();
             var selectionState = tileSelectionState;
@@ -128,9 +123,7 @@ namespace TMBS.Runtime.Facade
 
             var preview = new TilemapPreviewRenderer(previewTilemap, config.previewValidTile, config.previewInvalidTile);
 
-            var batchWriter = new TilemapBatchWriter();
-            
-            var executor = new ImmediateBuildExecutor(batchWriter, metadata, history, events, historyConfig.emitRegionModifiedEvents);
+            var executor = new ImmediateBuildExecutor(metadata, history, events, historyConfig.emitRegionModifiedEvents);
 
             return new TmbsRuntimeContext(
                 input,
