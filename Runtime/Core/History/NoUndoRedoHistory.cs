@@ -2,7 +2,13 @@ namespace TMBS.Core.History
 {
     public sealed class NoUndoRedoHistory : IUndoRedoHistory
     {
-        public int Capacity { get; set; }
+        private int _capacity;
+
+        public int Capacity
+        {
+            get => _capacity;
+            set => _capacity = value < 0 ? 0 : value;
+        }
 
         public void Push(IImmediateCommand command)
         {

@@ -13,15 +13,17 @@ namespace TMBS.Core.Pipeline
         private readonly ValidatorPipeline _validatorPipeline;
         private readonly IExecutionRouter _router;
         private readonly List<IPipelineStep> _steps;
+        private readonly bool _clampDragBounds;
         private Vector3Int _dragStartCell;
         private bool _hasDragStart;
 
-        public BuildPipeline(IGridSpace gridSpace, ValidatorPipeline validatorPipeline, IExecutionRouter router, List<IPipelineStep> steps)
+        public BuildPipeline(IGridSpace gridSpace, ValidatorPipeline validatorPipeline, IExecutionRouter router, List<IPipelineStep> steps, bool clampDragBounds)
         {
             _gridSpace = gridSpace;
             _validatorPipeline = validatorPipeline;
             _router = router;
             _steps = steps;
+            _clampDragBounds = clampDragBounds;
         }
 
         public void CancelActiveOperation()
@@ -69,8 +71,10 @@ namespace TMBS.Core.Pipeline
                 ctx = _steps[i].Execute(in ctx, in intent);
             }
 
-            // NOTA: No clamp antes de validar. El feedback/máscaras deben reflejar el drag real.
-            // ctx = ApplyBoundsClamp(ctx);
+            if (_clampDragBounds && ctx.HasDragBounds)
+            {
+                ctx = ApplyBoundsClamp(ctx);
+            }
 
             if (intent.Type == BuildIntentType.Confirm)
             {

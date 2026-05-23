@@ -9,11 +9,11 @@ namespace TMBS.Core.Validation
     {
         public BoundsInt allowedBounds = new BoundsInt(-50, -50, 0, 100, 100, 1);
         
-        // Por defecto NO cambia semántica: sigue siendo “todo o nada”.
-        // Si lo activas, permite construir solo en las celdas dentro de bounds usando WriteMask.
+        
+        
         public bool allowPartialPlacement = false;
         
-        // Para preview mixto: marcar fuera de bounds como inválido.
+        
         public bool markBlockedArea = true;
 
         public bool validateAlternateBehaviour = true;
@@ -24,7 +24,7 @@ namespace TMBS.Core.Validation
                 return ValidationResult.Valid;
 
             var opBounds = ValidationUtil.GetOperationBounds(in ctx);
-            // Si no hay volumen, no hay nada que hacer.
+            
             int w = opBounds.size.x;
             int h = opBounds.size.y;
             int d = opBounds.size.z;
@@ -41,7 +41,7 @@ namespace TMBS.Core.Validation
 
             for (int i = 0; i < len; i++)
             {
-                // Mantén el mismo orden que tu CellMask (x rápido, luego y, luego z)
+                
                 var cell = write.CellAt(i);
                 bool inside = allowedBounds.Contains(cell);
 
@@ -62,13 +62,13 @@ namespace TMBS.Core.Validation
 
             var fb = markBlockedArea ? new ValidationFeedback(blocked) : default;
 
-            // Si se permite parcial y hay al menos una celda válida, devolvemos “válido con máscara”
-            // para que el executor use WriteMask y solo escriba dentro de bounds.
+            
+            
             if (allowPartialPlacement && anyIn)
                 return ValidationResult.ValidWith(fb, write);
 
-            // Semántica estricta por defecto: invalida la operación completa,
-            // PERO mantiene feedback + write mask para preview y/o tooling.
+            
+            
             return ValidationResult.InvalidWith(ValidationFailure.OutOfBounds, fb, write);
         }
     }

@@ -19,10 +19,10 @@ namespace TMBS.Core.Validation
 
     public readonly struct ValidationFeedback
     {
-        /// <summary>
-        /// Máscara de celdas bloqueadas para preview. True = bloqueado.
-        /// Null = no hay bloqueos que pintar.
-        /// </summary>
+        
+        
+        
+        
         public readonly CellMask BlockedMask;
 
         public ValidationFeedback(CellMask blockedMask)
@@ -38,15 +38,15 @@ namespace TMBS.Core.Validation
         public readonly bool IsValid;
         public readonly ValidationFailure Failure;
 
-        /// <summary>
-        /// Feedback para preview (bloqueos).
-        /// </summary>
+        
+        
+        
         public readonly ValidationFeedback Feedback;
 
-        /// <summary>
-        /// Máscara de escritura. True = escribible. Null = todo escribible.
-        /// Este campo es el "plan de ejecución" acumulable entre validadores.
-        /// </summary>
+        
+        
+        
+        
         public readonly CellMask WriteMask;
 
         public ValidationResult(bool isValid, ValidationFailure failure, ValidationFeedback feedback, CellMask writeMask)

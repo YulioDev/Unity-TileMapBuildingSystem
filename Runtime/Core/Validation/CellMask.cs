@@ -4,10 +4,10 @@ using UnityEngine;
 
 namespace TMBS.Core.Validation
 {
-    /// <summary>
-    /// Máscara booleana sobre un BoundsInt. Bits[i] corresponde a una celda dentro de Bounds.
-    /// Semántica: el llamador decide qué significa "true" (bloqueado / escribible / etc.).
-    /// </summary>
+    
+    
+    
+    
     public sealed class CellMask
     {
         public BoundsInt Bounds { get; }

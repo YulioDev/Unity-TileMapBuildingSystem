@@ -48,17 +48,17 @@ namespace TMBS.Runtime.Facade
             events = new SimpleEventBus();
             focus = new AlwaysFocusService();
             
-            var historyConfig = config.history ?? new TmbsHistoryConfig();
+            var historyConfig = config.GetRuntimeHistoryConfig();
             if (historyConfig.enableUndoRedo)
             {
                 history = new UndoRedoHistory { Capacity = historyConfig.capacity };
             }
             else
             {
-                history = new NoUndoRedoHistory();
+                history = new NoUndoRedoHistory { Capacity = historyConfig.capacity };
             }
 
-            int metaCap = config.metadataCapacity > 0 ? config.metadataCapacity : 1000;
+            int metaCap = config.GetRuntimeMetadataCapacity();
             metadata = new DefaultMetadataStore(metaCap);
 
             IGridSpace gridSpace = new UnityGridSpace(targetTilemap);
@@ -73,6 +73,7 @@ namespace TMBS.Runtime.Facade
             selectionState = tileSelectionState;
 
             activeMode = new ImmediateBuildMode();
+            IExecutionRouter router = new ImmediateOnlyRouter();
 
             previewEvaluator = new PreviewPolicyEvaluator(config.previewPolicy);
 
@@ -126,7 +127,6 @@ namespace TMBS.Runtime.Facade
             }
 
             var validatorPipeline = new ValidatorPipeline(validators);
-            var router = new ImmediateOnlyRouter();
 
             var steps = new List<IPipelineStep>
             {
@@ -134,17 +134,17 @@ namespace TMBS.Runtime.Facade
                 new ModeInterpretationStep(activeMode)
             };
 
-            pipeline = new BuildPipeline(gridSpace, validatorPipeline, router, steps);
+            pipeline = new BuildPipeline(gridSpace, validatorPipeline, router, steps, config.GetRuntimeClampDragBoundsToBoundsValidator());
 
             preview = new TilemapPreviewRenderer(previewTilemap, config.previewValidTile, config.previewInvalidTile);
 
             var builder = new TileArrayBuilder();
             var batchWriter = new TilemapBatchWriter();
-            var writeStrategy = new HybridTilemapWriteStrategy(batchWriter, config.sparseWriteDenseThreshold);
+            
+            float sparseThreshold = config.GetRuntimeSparseWriteDenseThreshold();
+            var writeStrategy = new HybridTilemapWriteStrategy(batchWriter, sparseThreshold);
 
-            var emitEvents = config.history == null || config.history.emitRegionModifiedEvents;
-            executor = new ImmediateBuildExecutor(writeStrategy, metadata, history, events, builder, config.sparseWriteDenseThreshold, emitEvents);
+            executor = new ImmediateBuildExecutor(writeStrategy, metadata, history, events, builder, sparseThreshold, historyConfig.emitRegionModifiedEvents);
         }
     }
 }
-

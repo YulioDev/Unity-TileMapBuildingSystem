@@ -9,7 +9,9 @@ namespace TMBS.Core.Validation
 
         public ValidatorPipeline(List<IValidator> validators)
         {
-            _validators = validators ?? new List<IValidator>();
+            _validators = validators != null
+                ? new List<IValidator>(validators)
+                : new List<IValidator>();
         }
 
         public int InternalValidatorsCount => _validators.Count;
@@ -17,11 +19,16 @@ namespace TMBS.Core.Validation
         public bool TryGetBounds(int index, out UnityEngine.BoundsInt bounds)
         {
             bounds = default;
+
+            if (index < 0 || index >= _validators.Count)
+                return false;
+
             if (_validators[index] is BoundsValidator b)
             {
                 bounds = b.allowedBounds;
                 return true;
             }
+
             return false;
         }
 
@@ -53,7 +60,7 @@ namespace TMBS.Core.Validation
                     isValid = false;
                     if (firstFailure == ValidationFailure.None)
                         firstFailure = result.Failure;
-                    // En Full mantenemos “fail fast” para ejecución determinista.
+                    
                     if (mode == ValidationMode.Full)
                         break;
                 }
