@@ -52,6 +52,13 @@ namespace TMBS.Core.Validation
             return false;
         }
 
+        public CellMask Clone()
+        {
+            var clone = new CellMask(Bounds, false);
+            Array.Copy(Bits, clone.Bits, Bits.Length);
+            return clone;
+        }
+
         public void OrInPlace(CellMask other)
         {
             EnsureSameBounds(other);
@@ -70,7 +77,7 @@ namespace TMBS.Core.Validation
         {
             if (other == null) throw new ArgumentNullException(nameof(other));
             if (other.Bounds.position != Bounds.position || other.Bounds.size != Bounds.size)
-                throw new InvalidOperationException("CellMask bounds mismatch. All masks must target the same operation BoundsInt.");
+                throw new InvalidOperationException($"CellMask bounds mismatch. Expected {Bounds}, got {other.Bounds}.");
         }
     }
 }

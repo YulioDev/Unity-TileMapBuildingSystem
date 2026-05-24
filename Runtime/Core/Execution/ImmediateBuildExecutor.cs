@@ -59,7 +59,9 @@ namespace TMBS.Core.Execution
                 }
             }
 
-            var changesList = new List<TileChange>(trueCount);
+            var changes = new TileChange[trueCount];
+            int changeIndex = 0;
+            var beforeTiles = targetTilemap.GetTilesBlock(bounds);
 
             for (int z = 0; z < bounds.size.z; z++)
             {
@@ -71,7 +73,8 @@ namespace TMBS.Core.Execution
                         
                         if (writeMask.Bits[writeMask.IndexOf(cell)])
                         {
-                            var beforeTile = targetTilemap.GetTile(cell);
+                            int blockIndex = TMBS.Core.Grid.TileBlockIndex.IndexOf(bounds, cell);
+                            var beforeTile = beforeTiles[blockIndex];
                             var afterTile = ctx.AlternateBehaviour ? ctx.Decision.AlternateWriteTile : ctx.Decision.WriteTile;
 
                             BuildRecord? beforeMeta = null;
@@ -89,13 +92,12 @@ namespace TMBS.Core.Execution
                                     BuildState.Completed);
                             }
 
-                            changesList.Add(new TileChange(cell, beforeTile, afterTile, beforeMeta, afterMeta));
+                            changes[changeIndex++] = new TileChange(cell, beforeTile, afterTile, beforeMeta, afterMeta);
                         }
                     }
                 }
             }
 
-            var changes = changesList.ToArray();
             var instanceId = ctx.InstanceId;
 
             var command = new PlaceTilesCommand(
@@ -105,7 +107,14 @@ namespace TMBS.Core.Execution
                 bounds,
                 _emitRegionModifiedEvents ? (b) => NotifyRegionModified(instanceId, b) : (Action<BoundsInt>)null);
 
-            _history?.Push(command);
+            if (_history != null)
+            {
+                _history.Push(command);
+            }
+            else
+            {
+                command.Execute();
+            }
         }
 
         private void NotifyRegionModified(string instanceId, BoundsInt bounds)

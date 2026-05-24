@@ -15,16 +15,18 @@ namespace TMBS.Core.History
             set
             {
                 _capacity = value < 0 ? 0 : value;
-                Trim();
+                TrimUndo();
+                TrimRedo();
             }
         }
 
         public void Push(IImmediateCommand command)
         {
+            if (command == null) return;
             command.Execute();
             _undo.Add(command);
             _redo.Clear();
-            Trim();
+            TrimUndo();
         }
 
         public bool TryUndo()
@@ -32,9 +34,10 @@ namespace TMBS.Core.History
             int count = _undo.Count;
             if (count == 0) return false;
             var cmd = _undo[count - 1];
-            _undo.RemoveAt(count - 1);
             cmd.Undo();
+            _undo.RemoveAt(count - 1);
             _redo.Add(cmd);
+            TrimRedo();
             return true;
         }
 
@@ -43,10 +46,10 @@ namespace TMBS.Core.History
             int count = _redo.Count;
             if (count == 0) return false;
             var cmd = _redo[count - 1];
-            _redo.RemoveAt(count - 1);
             cmd.Redo();
+            _redo.RemoveAt(count - 1);
             _undo.Add(cmd);
-            Trim();
+            TrimUndo();
             return true;
         }
 
@@ -56,11 +59,14 @@ namespace TMBS.Core.History
             _redo.Clear();
         }
 
-        private void Trim()
+        private void TrimUndo() => Trim(_undo);
+        private void TrimRedo() => Trim(_redo);
+
+        private void Trim(List<IImmediateCommand> list)
         {
-            int overflow = _undo.Count - Capacity;
+            int overflow = list.Count - Capacity;
             if (overflow <= 0) return;
-            _undo.RemoveRange(0, overflow);
+            list.RemoveRange(0, overflow);
         }
     }
 }

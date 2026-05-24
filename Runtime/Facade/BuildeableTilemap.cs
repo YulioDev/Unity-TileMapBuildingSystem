@@ -65,6 +65,11 @@ namespace TMBS.Runtime.Facade
         private PreviewPolicyEvaluator _previewEvaluator;
         private IBuildMode _activeMode;
 
+        private Vector3Int _lastPreviewCell;
+        private BuildIntentType _lastPreviewIntent;
+        private bool _lastPreviewAlternate;
+        private bool _hasLastPreviewIntent;
+
         private IDisposable _selectionChangedSubscription;
 
         private IBuildInputAdapter _externalInputAdapter;
@@ -242,13 +247,6 @@ namespace TMBS.Runtime.Facade
             return null;
         }
 
-        private string GetSafeObjectName()
-        {
-            return gameObject != null && !string.IsNullOrEmpty(gameObject.name)
-                ? gameObject.name
-                : "[Unnamed GameObject]";
-        }
-
         private List<MonoBehaviour> ResolveAttachedSceneValidators()
         {
             if (!includeAttachedSceneValidators)
@@ -259,7 +257,7 @@ namespace TMBS.Runtime.Facade
 
             for (int i = 0; i < behaviours.Length; i++)
             {
-                if (behaviours[i] is IValidator)
+                if (behaviours[i] is IValidator && behaviours[i].enabled)
                     validators.Add(behaviours[i]);
             }
 
@@ -313,7 +311,6 @@ namespace TMBS.Runtime.Facade
 
             var composition = new TmbsCompositionRoot();
             var context = composition.Compose(
-                this, 
                 rootConfig, 
                 instanceId, 
                 resolvedInput, 
@@ -369,8 +366,7 @@ namespace TMBS.Runtime.Facade
                 _input.BuildIntentRaised -= OnBuildIntent;
                 _input.Disable();
 
-                if ((_inputCreatedInternally || _externalInputCreatedByProvider) && 
-                    _input is IDisposable disposable)
+                if (_inputCreatedInternally && _input is IDisposable disposable)
                 {
                     disposable.Dispose();
                 }
@@ -447,6 +443,26 @@ namespace TMBS.Runtime.Facade
                 return;
             }
 
+            if (intent.Type == BuildIntentType.PointMove || intent.Type == BuildIntentType.DragUpdate)
+            {
+                if (_hasLastPreviewIntent &&
+                    _lastPreviewCell == ctx.Cell &&
+                    _lastPreviewIntent == intent.Type &&
+                    _lastPreviewAlternate == intent.AlternateBehaviour)
+                {
+                    return;
+                }
+                
+                _hasLastPreviewIntent = true;
+                _lastPreviewCell = ctx.Cell;
+                _lastPreviewIntent = intent.Type;
+                _lastPreviewAlternate = intent.AlternateBehaviour;
+            }
+            else
+            {
+                _hasLastPreviewIntent = false;
+            }
+
             if (intent.Type != BuildIntentType.Confirm)
             {
                 if (_previewEvaluator.ShouldShowPreview(_activeMode))
@@ -500,11 +516,6 @@ namespace TMBS.Runtime.Facade
                 _executor.Execute(in ctx, targetTilemap);
                 _preview.Hide();
             }
-        }
-
-        private static bool IsMutating(BuildIntentType type)
-        {
-            return type == BuildIntentType.Confirm;
         }
 
         private static bool RequiresInputFocus(BuildIntentType type)

@@ -24,7 +24,6 @@ namespace TMBS.Runtime.Facade
     public sealed class TmbsCompositionRoot
     {
         public TmbsRuntimeContext Compose(
-            BuildeableTilemap facade,
             TmbsRootConfig config,
             string instanceId,
             IBuildInputAdapter inputAdapter,
@@ -47,7 +46,7 @@ namespace TMBS.Runtime.Facade
                 history = new NoUndoRedoHistory { Capacity = historyConfig.capacity };
             }
 
-            int metaCap = config.GetRuntimeMetadataCapacity();
+            int metaCap = config.GetRuntimeMetadataInitialCapacity();
             var metadata = new DefaultMetadataStore(metaCap);
 
             IGridSpace gridSpace = new UnityGridSpace(targetTilemap);

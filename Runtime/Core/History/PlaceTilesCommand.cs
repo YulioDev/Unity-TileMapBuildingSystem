@@ -37,29 +37,25 @@ namespace TMBS.Core.History
             if (_changes == null || _changes.Length == 0)
                 return;
 
-            if (_changes == null || _changes.Length == 0)
-                return;
-
-            // Decide if this is dense or sparse based on bounds and change count
             int totalCells = TMBS.Core.Grid.TileBlockIndex.Volume(_bounds);
+            
             if (_changes.Length >= totalCells)
             {
-                // Dense path: build tiles array and call SetTilesBlock
                 var tiles = new TileBase[totalCells];
-                for (int i = 0; i < totalCells; i++)
-                {
-                    // Default to before tile
-                    tiles[i] = null;
-                }
-
                 for (int i = 0; i < _changes.Length; i++)
                 {
                     var change = _changes[i];
                     int index = TMBS.Core.Grid.TileBlockIndex.IndexOf(_bounds, change.Cell);
                     tiles[index] = useAfter ? change.AfterTile : change.BeforeTile;
+                }
 
-                    if (_metadata != null)
+                _tilemap.SetTilesBlock(_bounds, tiles);
+
+                if (_metadata != null)
+                {
+                    for (int i = 0; i < _changes.Length; i++)
                     {
+                        var change = _changes[i];
                         var meta = useAfter ? change.AfterMeta : change.BeforeMeta;
                         if (!meta.HasValue)
                             _metadata.Remove(change.Cell);
@@ -68,12 +64,10 @@ namespace TMBS.Core.History
                     }
                 }
 
-                _tilemap.SetTilesBlock(_bounds, tiles);
                 _onRegionModified?.Invoke(_bounds);
                 return;
             }
 
-            // Sparse path: use SetTiles with explicit positions
             var positions = new Vector3Int[_changes.Length];
             var tilesSparse = new TileBase[_changes.Length];
 
@@ -82,9 +76,15 @@ namespace TMBS.Core.History
                 var change = _changes[i];
                 positions[i] = change.Cell;
                 tilesSparse[i] = useAfter ? change.AfterTile : change.BeforeTile;
+            }
 
-                if (_metadata != null)
+            _tilemap.SetTiles(positions, tilesSparse);
+
+            if (_metadata != null)
+            {
+                for (int i = 0; i < _changes.Length; i++)
                 {
+                    var change = _changes[i];
                     var meta = useAfter ? change.AfterMeta : change.BeforeMeta;
                     if (!meta.HasValue)
                         _metadata.Remove(change.Cell);
@@ -93,7 +93,6 @@ namespace TMBS.Core.History
                 }
             }
 
-            _tilemap.SetTiles(positions, tilesSparse);
             _onRegionModified?.Invoke(_bounds);
         }
     }

@@ -45,13 +45,13 @@ namespace TMBS.Core.Validation
 
                 if (result.Feedback.BlockedMask != null && result.Feedback.BlockedMask.AnyTrue())
                 {
-                    if (combinedBlocked == null) combinedBlocked = result.Feedback.BlockedMask;
+                    if (combinedBlocked == null) combinedBlocked = result.Feedback.BlockedMask.Clone();
                     else combinedBlocked.OrInPlace(result.Feedback.BlockedMask);
                 }
 
                 if (result.WriteMask != null)
                 {
-                    if (combinedWrite == null) combinedWrite = result.WriteMask;
+                    if (combinedWrite == null) combinedWrite = result.WriteMask.Clone();
                     else combinedWrite.AndInPlace(result.WriteMask);
                 }
 

@@ -44,12 +44,7 @@ namespace TMBS.Runtime.Config
         [Header("Metadata")]
         [Tooltip("Maximum number of build records the system can store in memory.")]
         [Min(0)]
-        public int metadataCapacity = 4096;
-
-        [Header("Performance")]
-        [Tooltip("Determines the threshold to switch between sparse (individual) and dense (bulk) tilemap writes.")]
-        [Range(0f, 1f)]
-        public float sparseWriteDenseThreshold = 0.65f;
+        public int metadataInitialCapacity = 4096;
 
         [Header("Bounds")]
         [Tooltip("If enabled, builds will be clamped to the boundaries defined by Bounds Validators.")]
@@ -72,14 +67,9 @@ namespace TMBS.Runtime.Config
             };
         }
 
-        public int GetRuntimeMetadataCapacity()
+        public int GetRuntimeMetadataInitialCapacity()
         {
-            return Mathf.Max(0, metadataCapacity);
-        }
-
-        public float GetRuntimeSparseWriteDenseThreshold()
-        {
-            return Mathf.Clamp01(sparseWriteDenseThreshold);
+            return Mathf.Max(0, metadataInitialCapacity);
         }
 
         public bool GetRuntimeClampDragBoundsToBoundsValidator()
@@ -110,8 +100,7 @@ namespace TMBS.Runtime.Config
             }
 
             history.capacity = Mathf.Max(0, history.capacity);
-            metadataCapacity = Mathf.Max(0, metadataCapacity);
-            sparseWriteDenseThreshold = Mathf.Clamp01(sparseWriteDenseThreshold);
+            metadataInitialCapacity = Mathf.Max(0, metadataInitialCapacity);
         }
     }
 }
