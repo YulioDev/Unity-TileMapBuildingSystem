@@ -86,6 +86,8 @@ namespace TMBS.Runtime.Facade
             {
                 tickable.Tick(Time.deltaTime);
             }
+
+            _pendingDebugBuilder?.Step();
         }
 
         private Camera ResolveCamera()
@@ -501,6 +503,49 @@ namespace TMBS.Runtime.Facade
                 }
 
                 if (!ctx.QuickValidation.IsValid)
+                {
+                    var bounds = ctx.HasDragBounds ? ctx.DragBounds : new BoundsInt(ctx.Cell, Vector3Int.one);
+                    _events.Publish(new ValidationFailedEvent(instanceId, ctx.QuickValidation.Failure, ctx.Cell, bounds, ctx.Feedback.BlockedMask));
+                }
+                return;
+            }
+
+            if (!ctx.FullValidation.IsValid)
+            {
+                var bounds = ctx.HasDragBounds ? ctx.DragBounds : new BoundsInt(ctx.Cell, Vector3Int.one);
+                _events.Publish(new ValidationFailedEvent(instanceId, ctx.FullValidation.Failure, ctx.Cell, bounds, ctx.FullValidation.Feedback.BlockedMask));
+                return;
+            }
+
+            if (ctx.Decision.Type != Core.Execution.ExecutionDecisionType.Reject)
+            {
+                _executor.Execute(in ctx, targetTilemap);
+                _preview.Hide();
+            }
+        }
+
+        private static bool RequiresInputFocus(BuildIntentType type)
+        {
+            return type == BuildIntentType.DragStart
+                   || type == BuildIntentType.DragUpdate
+                   || type == BuildIntentType.DragEnd
+                   || type == BuildIntentType.Confirm;
+        }
+    }
+}getTilemap);
+                _preview.Hide();
+            }
+        }
+
+        private static bool RequiresInputFocus(BuildIntentType type)
+        {
+            return type == BuildIntentType.DragStart
+                   || type == BuildIntentType.DragUpdate
+                   || type == BuildIntentType.DragEnd
+                   || type == BuildIntentType.Confirm;
+        }
+    }
+}tion.IsValid)
                 {
                     var bounds = ctx.HasDragBounds ? ctx.DragBounds : new BoundsInt(ctx.Cell, Vector3Int.one);
                     _events.Publish(new ValidationFailedEvent(instanceId, ctx.QuickValidation.Failure, ctx.Cell, bounds, ctx.Feedback.BlockedMask));

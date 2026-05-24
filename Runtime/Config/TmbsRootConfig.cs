@@ -63,6 +63,11 @@ namespace TMBS.Runtime.Config
             return pendingConstruction ?? new TmbsPendingConstructionConfig();
         }
 
+        public TmbsPendingDebugConfig GetRuntimePendingDebugConfig()
+        {
+            return pendingDebug ?? new TmbsPendingDebugConfig();
+        }
+
         public TmbsHistoryConfig GetRuntimeHistoryConfig()
         {
             var source = history ?? new TmbsHistoryConfig();
@@ -110,6 +115,9 @@ namespace TMBS.Runtime.Config
 
             history.capacity = Mathf.Max(0, history.capacity);
             metadataInitialCapacity = Mathf.Max(0, metadataInitialCapacity);
+        }
+    }
+}lCapacity = Mathf.Max(0, metadataInitialCapacity);
         }
     }
 }

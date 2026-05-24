@@ -57,12 +57,13 @@ namespace TMBS.Core.Pending
             if (!cellData.IsReadyForWork)
                 return false;
 
-            pending.UpdateCell(idx, cellData.WithWorkAdded(amount));
+            var updated = cellData.WithWorkAdded(amount);
+            pending.UpdateCell(idx, updated);
+
             if (pending.State != PendingConstructionState.InProgress)
-            {
                 pending.SetState(PendingConstructionState.InProgress);
-                _events?.Publish(new PendingConstructionChangedEvent(_instanceId, pending.Id, pending.State));
-            }
+
+            _events?.Publish(new PendingConstructionChangedEvent(_instanceId, pending.Id, pending.State));
 
             return true;
         }

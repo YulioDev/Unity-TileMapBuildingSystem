@@ -164,6 +164,18 @@ namespace TMBS.Runtime.Facade
                 executor,
                 previewEvaluator,
                 activeMode,
+                pendingWorkApi,
+                pendingDebugBuilder);
+        }
+    }
+}               focus,
+                history,
+                metadata,
+                preview,
+                selectionState,
+                executor,
+                previewEvaluator,
+                activeMode,
                 pendingWorkApi);
         }
     }

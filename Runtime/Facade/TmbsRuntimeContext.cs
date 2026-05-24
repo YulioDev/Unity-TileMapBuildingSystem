@@ -27,6 +27,7 @@ namespace TMBS.Runtime.Facade
         public readonly PreviewPolicyEvaluator PreviewEvaluator;
         public readonly IBuildMode ActiveMode;
         public readonly IPendingConstructionWorkApi PendingWorkApi;
+        public readonly PendingDebugBuilder PendingDebugBuilder;
 
         public TmbsRuntimeContext(
             IBuildInputAdapter input,
@@ -40,7 +41,8 @@ namespace TMBS.Runtime.Facade
             IBuildExecutor executor,
             PreviewPolicyEvaluator previewEvaluator,
             IBuildMode activeMode,
-            IPendingConstructionWorkApi pendingWorkApi)
+            IPendingConstructionWorkApi pendingWorkApi,
+            PendingDebugBuilder pendingDebugBuilder)
         {
             Input = input;
             Pipeline = pipeline;
@@ -54,6 +56,7 @@ namespace TMBS.Runtime.Facade
             PreviewEvaluator = previewEvaluator;
             ActiveMode = activeMode;
             PendingWorkApi = pendingWorkApi;
+            PendingDebugBuilder = pendingDebugBuilder;
         }
     }
 }
