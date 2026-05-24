@@ -10,7 +10,7 @@ using UnityEngine.Tilemaps;
 
 namespace TMBS.Core.Execution
 {
-    public sealed class ImmediateBuildExecutor
+    public sealed class ImmediateBuildExecutor : IBuildExecutor
     {
         private readonly IMetadataStore _metadata;
         private readonly IUndoRedoHistory _history;

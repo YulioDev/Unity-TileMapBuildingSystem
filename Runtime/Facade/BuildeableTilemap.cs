@@ -61,7 +61,10 @@ namespace TMBS.Runtime.Facade
         private IMetadataStore _metadata;
         private IPreviewRenderer _preview;
         private TileSelectionState _tileSelectionState;
-        private ImmediateBuildExecutor _executor;
+        private TMBS.Core.Execution.IBuildExecutor _executor;
+        private TMBS.Core.Pending.IPendingConstructionWorkApi _pendingWorkApi;
+
+        public TMBS.Core.Pending.IPendingConstructionWorkApi PendingWorkApi => _pendingWorkApi;
         private PreviewPolicyEvaluator _previewEvaluator;
         private IBuildMode _activeMode;
 
@@ -327,6 +330,7 @@ namespace TMBS.Runtime.Facade
             _preview = context.Preview;
             _tileSelectionState = context.SelectionState;
             _executor = context.Executor;
+            _pendingWorkApi = context.PendingWorkApi;
             _previewEvaluator = context.PreviewEvaluator;
             _activeMode = context.ActiveMode;
             
@@ -511,7 +515,7 @@ namespace TMBS.Runtime.Facade
                 return;
             }
 
-            if (ctx.Decision.Type == Core.Execution.ExecutionDecisionType.ExecuteImmediate)
+            if (ctx.Decision.Type != Core.Execution.ExecutionDecisionType.Reject)
             {
                 _executor.Execute(in ctx, targetTilemap);
                 _preview.Hide();

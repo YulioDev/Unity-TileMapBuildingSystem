@@ -10,7 +10,7 @@ namespace TMBS.Runtime.Config
     public sealed class TmbsRootConfig : ScriptableObject
     {
         [Header("Execution")]
-        [Tooltip("Defines how building actions are executed. Currently supports Immediate mode only.")]
+        [Tooltip("Defines how building actions are executed. Immediate: places tiles instantly. Pending: creates deferred build orders for external agents.")]
         public ExecutionMode executionMode = ExecutionMode.Immediate;
 
         [Header("Input")]
@@ -50,9 +50,18 @@ namespace TMBS.Runtime.Config
         [Tooltip("If enabled, builds will be clamped to the boundaries defined by Bounds Validators.")]
         public bool clampDragBoundsToBoundsValidator = false;
 
+        [Header("Pending Construction")]
+        [Tooltip("Configuration for deferred/pending build mode. Only active when ExecutionMode is Pending.")]
+        public TmbsPendingConstructionConfig pendingConstruction = new TmbsPendingConstructionConfig();
+
         [Header("Validation")]
         [Tooltip("List of global validators that all build operations must pass.")]
         public List<ValidatorEntry> validators = new List<ValidatorEntry>();
+
+        public TmbsPendingConstructionConfig GetRuntimePendingConfig()
+        {
+            return pendingConstruction ?? new TmbsPendingConstructionConfig();
+        }
 
         public TmbsHistoryConfig GetRuntimeHistoryConfig()
         {

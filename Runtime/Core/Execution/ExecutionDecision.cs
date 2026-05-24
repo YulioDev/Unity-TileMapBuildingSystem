@@ -6,7 +6,8 @@ namespace TMBS.Core.Execution
     public enum ExecutionDecisionType
     {
         Reject,
-        ExecuteImmediate
+        ExecuteImmediate,
+        CreatePending
     }
 
     public readonly struct ExecutionDecision

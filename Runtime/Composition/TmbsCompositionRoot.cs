@@ -7,6 +7,7 @@ using TMBS.Core.History;
 using TMBS.Core.Input;
 using TMBS.Core.Metadata;
 using TMBS.Core.Modes;
+using TMBS.Core.Pending;
 using TMBS.Core.Pipeline;
 using TMBS.Core.Pipeline.Steps;
 using TMBS.Core.Preview;
@@ -57,7 +58,29 @@ namespace TMBS.Runtime.Facade
             var selectionState = tileSelectionState;
 
             IBuildMode activeMode = new ImmediateBuildMode();
-            IExecutionRouter router = new ImmediateOnlyRouter();
+            IExecutionRouter router;
+            IBuildExecutor executor;
+            IPendingConstructionStore pendingStore = null;
+            IPendingConstructionWorkApi pendingWorkApi = null;
+
+            switch (config.executionMode)
+            {
+                case ExecutionMode.Pending:
+                {
+                    var pendingConfig = config.GetRuntimePendingConfig();
+                    pendingStore = new DefaultPendingConstructionStore();
+                    router = new PendingBuildRouter();
+                    executor = new PendingBuildExecutor(pendingStore, events, pendingConfig);
+                    pendingWorkApi = new DefaultPendingConstructionWorkApi(
+                        pendingStore, events, targetTilemap, metadata, instanceId);
+                    break;
+                }
+                case ExecutionMode.Immediate:
+                default:
+                    router = new ImmediateOnlyRouter();
+                    executor = new ImmediateBuildExecutor(metadata, history, events, historyConfig.emitRegionModifiedEvents);
+                    break;
+            }
 
             var previewEvaluator = new PreviewPolicyEvaluator(config.previewPolicy);
 
@@ -110,6 +133,13 @@ namespace TMBS.Runtime.Facade
                 }
             }
 
+            if (pendingStore != null)
+            {
+                for (int i = 0; i < validators.Count; i++)
+                    if (validators[i] is IPendingStoreInjectable si)
+                        si.InjectStore(pendingStore);
+            }
+
             var validatorPipeline = new ValidatorPipeline(validators);
 
             var steps = new List<IPipelineStep>
@@ -122,8 +152,6 @@ namespace TMBS.Runtime.Facade
 
             var preview = new TilemapPreviewRenderer(previewTilemap, config.previewValidTile, config.previewInvalidTile);
 
-            var executor = new ImmediateBuildExecutor(metadata, history, events, historyConfig.emitRegionModifiedEvents);
-
             return new TmbsRuntimeContext(
                 input,
                 pipeline,
@@ -135,7 +163,8 @@ namespace TMBS.Runtime.Facade
                 selectionState,
                 executor,
                 previewEvaluator,
-                activeMode);
+                activeMode,
+                pendingWorkApi);
         }
     }
 }

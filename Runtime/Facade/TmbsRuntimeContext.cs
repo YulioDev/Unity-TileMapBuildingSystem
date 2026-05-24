@@ -1,5 +1,6 @@
 using TMBS.Core.Events;
 using TMBS.Core.Execution;
+using TMBS.Core.Pending;
 using TMBS.Core.Focus;
 using TMBS.Core.History;
 using TMBS.Core.Input;
@@ -22,9 +23,10 @@ namespace TMBS.Runtime.Facade
         public readonly IMetadataStore Metadata;
         public readonly IPreviewRenderer Preview;
         public readonly TileSelectionState SelectionState;
-        public readonly ImmediateBuildExecutor Executor;
+        public readonly IBuildExecutor Executor;
         public readonly PreviewPolicyEvaluator PreviewEvaluator;
         public readonly IBuildMode ActiveMode;
+        public readonly IPendingConstructionWorkApi PendingWorkApi;
 
         public TmbsRuntimeContext(
             IBuildInputAdapter input,
@@ -35,9 +37,10 @@ namespace TMBS.Runtime.Facade
             IMetadataStore metadata,
             IPreviewRenderer preview,
             TileSelectionState selectionState,
-            ImmediateBuildExecutor executor,
+            IBuildExecutor executor,
             PreviewPolicyEvaluator previewEvaluator,
-            IBuildMode activeMode)
+            IBuildMode activeMode,
+            IPendingConstructionWorkApi pendingWorkApi)
         {
             Input = input;
             Pipeline = pipeline;
@@ -50,6 +53,7 @@ namespace TMBS.Runtime.Facade
             Executor = executor;
             PreviewEvaluator = previewEvaluator;
             ActiveMode = activeMode;
+            PendingWorkApi = pendingWorkApi;
         }
     }
 }

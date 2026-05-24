@@ -15,7 +15,7 @@ MonoBehaviour:
   executionMode: 0
   input:
     mode: 1
-    strictInputValidation: 0
+    strictInputValidation: 1
     requirePoint: 1
     requireConfirm: 1
     requireCancel: 1
@@ -33,8 +33,8 @@ MonoBehaviour:
     capacity: 256
     clearOnDisable: 0
     emitRegionModifiedEvents: 1
-  metadataCapacity: 4096
-  sparseWriteDenseThreshold: 0.65
+  historyCapacity: -1
+  metadataInitialCapacity: 4096
   clampDragBoundsToBoundsValidator: 0
   validators:
   - enabled: 1
@@ -52,7 +52,7 @@ MonoBehaviour:
     - rid: 7190439193056116804
       type: {class: OccupancyValidator, ns: TMBS.Core.Validation, asm: Assembly-CSharp}
       data:
-        allowOverwrite: 0
+        allowOverwrite: 1
         skipOccupiedCells: 1
         markBlockedArea: 1
         validateAlternateBehaviour: 0
