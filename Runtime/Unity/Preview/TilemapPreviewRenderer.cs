@@ -15,7 +15,6 @@ namespace TMBS.Unity.Preview
         private TileBase _lastTile;
 
         private TileBase[] _buffer;     
-        private TileBase[] _clearBuffer; 
 
         public TilemapPreviewRenderer(Tilemap tilemap, TileBase valid, TileBase invalid)
         {
@@ -85,7 +84,8 @@ namespace TMBS.Unity.Preview
 
         public void Hide()
         {
-            ClearPrevious();
+            _tilemap.ClearAllTiles();
+            _hasLast = false;
             _lastTile = null;
         }
 
@@ -93,11 +93,7 @@ namespace TMBS.Unity.Preview
         {
             if (!_hasLast) return;
             
-            int len = Volume(_last);
-            EnsureClearBuffer(len);
-            
-            
-            _tilemap.SetTilesBlock(_last, _clearBuffer);
+            _tilemap.ClearAllTiles();
             _hasLast = false;
         }
 
@@ -124,17 +120,6 @@ namespace TMBS.Unity.Preview
         {
             if (_buffer == null || _buffer.Length != len)
                 _buffer = new TileBase[len];
-        }
-
-        private void EnsureClearBuffer(int len)
-        {
-            if (_clearBuffer == null || _clearBuffer.Length != len)
-            {
-                _clearBuffer = new TileBase[len]; 
-                return;
-            }
-            
-            System.Array.Clear(_clearBuffer, 0, len);
         }
 
         private static void FillArray(TileBase[] arr, int len, TileBase tile)

@@ -6,7 +6,18 @@ namespace TMBS.Core.Execution
     {
         public ExecutionDecision Decide(in PipelineContext ctx)
         {
-            return ctx.FullValidation.IsValid ? ExecutionDecision.ExecuteImmediate : ExecutionDecision.Reject;
+            if (!ctx.FullValidation.IsValid)
+                return ExecutionDecision.Reject;
+
+            var tile = ctx.SelectedTile;
+
+            return new ExecutionDecision(
+                ExecutionDecisionType.ExecuteImmediate,
+                ctx.FullValidation.WriteMask,
+                tile,
+                tile, 
+                1 
+            );
         }
     }
 }

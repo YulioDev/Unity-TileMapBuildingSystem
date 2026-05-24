@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using TMBS.Core.Catalog;
 using TMBS.Core.Events;
 using TMBS.Core.Execution;
 using TMBS.Core.Focus;
@@ -24,31 +23,20 @@ namespace TMBS.Runtime.Facade
 {
     public sealed class TmbsCompositionRoot
     {
-        public void Compose(
-            BuildeableTilemap facade,
+        public TmbsRuntimeContext Compose(
             TmbsRootConfig config,
             string instanceId,
             IBuildInputAdapter inputAdapter,
             Tilemap targetTilemap,
             Tilemap previewTilemap,
-            List<MonoBehaviour> sceneValidators,
-            out IBuildInputAdapter input,
-            out IBuildPipeline pipeline,
-            out IEventBus events,
-            out IInputFocusService focus,
-            out IUndoRedoHistory history,
-            out IMetadataStore metadata,
-            out IPreviewRenderer preview,
-            out TileSelectionState selectionState,
-            out ImmediateBuildExecutor executor,
-            out PreviewPolicyEvaluator previewEvaluator,
-            out IBuildMode activeMode)
+            List<MonoBehaviour> sceneValidators)
         {
-            input = inputAdapter;
-            events = new SimpleEventBus();
-            focus = new AlwaysFocusService();
+            var input = inputAdapter;
+            var events = new SimpleEventBus();
+            var focus = (IInputFocusService)new TMBS.Unity.Input.UiFocusGuardService();
             
             var historyConfig = config.GetRuntimeHistoryConfig();
+            IUndoRedoHistory history;
             if (historyConfig.enableUndoRedo)
             {
                 history = new UndoRedoHistory { Capacity = historyConfig.capacity };
@@ -58,24 +46,20 @@ namespace TMBS.Runtime.Facade
                 history = new NoUndoRedoHistory { Capacity = historyConfig.capacity };
             }
 
-            int metaCap = config.GetRuntimeMetadataCapacity();
-            metadata = new DefaultMetadataStore(metaCap);
+            int metaCap = config.GetRuntimeMetadataInitialCapacity();
+            var metadata = new DefaultMetadataStore(metaCap);
 
             IGridSpace gridSpace = new UnityGridSpace(targetTilemap);
 
-            var catalog = new DefaultBuildableCatalog();
-            if (config.buildTile != null)
-            {
-                catalog.Register(new BuildableDefinition(1, "DefaultWall", config.buildTile));
-            }
+            // Catalog creation removed: not used in current composition flow
 
             var tileSelectionState = new TileSelectionState();
-            selectionState = tileSelectionState;
+            var selectionState = tileSelectionState;
 
-            activeMode = new ImmediateBuildMode();
+            IBuildMode activeMode = new ImmediateBuildMode();
             IExecutionRouter router = new ImmediateOnlyRouter();
 
-            previewEvaluator = new PreviewPolicyEvaluator(config.previewPolicy);
+            var previewEvaluator = new PreviewPolicyEvaluator(config.previewPolicy);
 
             var occupancySource = new UnityTilemapOccupancySource(targetTilemap);
 
@@ -134,17 +118,24 @@ namespace TMBS.Runtime.Facade
                 new ModeInterpretationStep(activeMode)
             };
 
-            pipeline = new BuildPipeline(gridSpace, validatorPipeline, router, steps, config.GetRuntimeClampDragBoundsToBoundsValidator());
+            var pipeline = new BuildPipeline(gridSpace, validatorPipeline, router, steps, config.GetRuntimeClampDragBoundsToBoundsValidator());
 
-            preview = new TilemapPreviewRenderer(previewTilemap, config.previewValidTile, config.previewInvalidTile);
+            var preview = new TilemapPreviewRenderer(previewTilemap, config.previewValidTile, config.previewInvalidTile);
 
-            var builder = new TileArrayBuilder();
-            var batchWriter = new TilemapBatchWriter();
-            
-            float sparseThreshold = config.GetRuntimeSparseWriteDenseThreshold();
-            var writeStrategy = new HybridTilemapWriteStrategy(batchWriter, sparseThreshold);
+            var executor = new ImmediateBuildExecutor(metadata, history, events, historyConfig.emitRegionModifiedEvents);
 
-            executor = new ImmediateBuildExecutor(writeStrategy, metadata, history, events, builder, sparseThreshold, historyConfig.emitRegionModifiedEvents);
+            return new TmbsRuntimeContext(
+                input,
+                pipeline,
+                events,
+                focus,
+                history,
+                metadata,
+                preview,
+                selectionState,
+                executor,
+                previewEvaluator,
+                activeMode);
         }
     }
 }

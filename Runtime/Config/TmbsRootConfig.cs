@@ -38,15 +38,13 @@ namespace TMBS.Runtime.Config
         [Tooltip("Configures Undo/Redo capabilities and history retention.")]
         public TmbsHistoryConfig history = new TmbsHistoryConfig();
 
+        [SerializeField, HideInInspector]
+        private int historyCapacity = -1;
+
         [Header("Metadata")]
         [Tooltip("Maximum number of build records the system can store in memory.")]
         [Min(0)]
-        public int metadataCapacity = 4096;
-
-        [Header("Performance")]
-        [Tooltip("Determines the threshold to switch between sparse (individual) and dense (bulk) tilemap writes.")]
-        [Range(0f, 1f)]
-        public float sparseWriteDenseThreshold = 0.65f;
+        public int metadataInitialCapacity = 4096;
 
         [Header("Bounds")]
         [Tooltip("If enabled, builds will be clamped to the boundaries defined by Bounds Validators.")]
@@ -69,14 +67,9 @@ namespace TMBS.Runtime.Config
             };
         }
 
-        public int GetRuntimeMetadataCapacity()
+        public int GetRuntimeMetadataInitialCapacity()
         {
-            return Mathf.Max(0, metadataCapacity);
-        }
-
-        public float GetRuntimeSparseWriteDenseThreshold()
-        {
-            return Mathf.Clamp01(sparseWriteDenseThreshold);
+            return Mathf.Max(0, metadataInitialCapacity);
         }
 
         public bool GetRuntimeClampDragBoundsToBoundsValidator()
@@ -96,10 +89,18 @@ namespace TMBS.Runtime.Config
 
             if (history == null)
                 history = new TmbsHistoryConfig();
+            // Migrate legacy historyCapacity if present. This ensures old assets are migrated in the editor
+            // but prevents runtime getters from mutating assets.
+            if (historyCapacity > 0)
+            {
+                if (history.capacity <= 0)
+                    history.capacity = historyCapacity;
+
+                historyCapacity = -1;
+            }
 
             history.capacity = Mathf.Max(0, history.capacity);
-            metadataCapacity = Mathf.Max(0, metadataCapacity);
-            sparseWriteDenseThreshold = Mathf.Clamp01(sparseWriteDenseThreshold);
+            metadataInitialCapacity = Mathf.Max(0, metadataInitialCapacity);
         }
     }
 }

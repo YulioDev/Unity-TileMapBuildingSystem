@@ -12,15 +12,18 @@ namespace TMBS.Core.Events
             if (_handlers.TryGetValue(typeof(T), out var obj))
             {
                 var list = (List<Action<T>>)obj;
-                for (int i = 0; i < list.Count; i++)
+                var snapshot = list.ToArray();
+                for (int i = 0; i < snapshot.Length; i++)
                 {
-                    list[i](evt);
+                    snapshot[i](evt);
                 }
             }
         }
 
         public IDisposable Subscribe<T>(Action<T> handler) where T : struct
         {
+            if (handler == null) throw new ArgumentNullException(nameof(handler));
+
             if (!_handlers.TryGetValue(typeof(T), out var obj))
             {
                 obj = new List<Action<T>>(8);

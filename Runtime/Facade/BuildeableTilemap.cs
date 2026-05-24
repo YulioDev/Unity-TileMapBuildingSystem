@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using TMBS.Core.Catalog;
 using TMBS.Core.Events;
 using TMBS.Core.Execution;
 using TMBS.Core.Focus;
@@ -65,6 +64,13 @@ namespace TMBS.Runtime.Facade
         private ImmediateBuildExecutor _executor;
         private PreviewPolicyEvaluator _previewEvaluator;
         private IBuildMode _activeMode;
+
+        private Vector3Int _lastPreviewCell;
+        private BuildIntentType _lastPreviewIntent;
+        private bool _lastPreviewAlternate;
+        private bool _hasLastPreviewIntent;
+
+        private IDisposable _selectionChangedSubscription;
 
         private IBuildInputAdapter _externalInputAdapter;
         private IBuildInputAdapterProvider _externalInputProvider;
@@ -207,7 +213,19 @@ namespace TMBS.Runtime.Facade
 
         private IBuildInputAdapter CreateLegacyMouseInputAdapter()
         {
-            return new TMBS.Unity.Input.LegacyMouseBuildInputAdapter(ResolveCamera);
+            System.Func<UnityEngine.Plane> planeProvider = () =>
+            {
+                // Derive a construction plane from the target tilemap transform: plane normal points along -forward
+                var t = targetTilemap != null ? targetTilemap.transform : null;
+                if (t != null)
+                {
+                    return new UnityEngine.Plane(t.forward, t.position);
+                }
+
+                return new UnityEngine.Plane(Vector3.back, Vector3.zero);
+            };
+
+            return new TMBS.Unity.Input.LegacyMouseBuildInputAdapter(ResolveCamera, planeProvider);
         }
 
         private IBuildInputAdapter ResolveExternalInputAdapter()
@@ -229,13 +247,6 @@ namespace TMBS.Runtime.Facade
             return null;
         }
 
-        private string GetSafeObjectName()
-        {
-            return gameObject != null && !string.IsNullOrEmpty(gameObject.name)
-                ? gameObject.name
-                : "[Unnamed GameObject]";
-        }
-
         private List<MonoBehaviour> ResolveAttachedSceneValidators()
         {
             if (!includeAttachedSceneValidators)
@@ -246,7 +257,7 @@ namespace TMBS.Runtime.Facade
 
             for (int i = 0; i < behaviours.Length; i++)
             {
-                if (behaviours[i] is IValidator)
+                if (behaviours[i] is IValidator && behaviours[i].enabled)
                     validators.Add(behaviours[i]);
             }
 
@@ -299,12 +310,29 @@ namespace TMBS.Runtime.Facade
             }
 
             var composition = new TmbsCompositionRoot();
-            composition.Compose(this, rootConfig, instanceId, resolvedInput, targetTilemap, previewTilemap, ResolveAttachedSceneValidators(),
-                out _input, out _pipeline, out _events, out _focus, out _history, out _metadata, out _preview, out _tileSelectionState, out _executor, out _previewEvaluator, out _activeMode);
+            var context = composition.Compose(
+                rootConfig, 
+                instanceId, 
+                resolvedInput, 
+                targetTilemap, 
+                previewTilemap, 
+                ResolveAttachedSceneValidators());
+                
+            _input = context.Input;
+            _pipeline = context.Pipeline;
+            _events = context.Events;
+            _focus = context.Focus;
+            _history = context.History;
+            _metadata = context.Metadata;
+            _preview = context.Preview;
+            _tileSelectionState = context.SelectionState;
+            _executor = context.Executor;
+            _previewEvaluator = context.PreviewEvaluator;
+            _activeMode = context.ActiveMode;
             
             if (_events != null)
             {
-                _events.Subscribe<BuildSelectionChangedEvent>(OnBuildSelectionChanged);
+                _selectionChangedSubscription = _events.Subscribe<BuildSelectionChangedEvent>(OnBuildSelectionChanged);
             }
 
             if (_input != null)
@@ -338,8 +366,7 @@ namespace TMBS.Runtime.Facade
                 _input.BuildIntentRaised -= OnBuildIntent;
                 _input.Disable();
 
-                if ((_inputCreatedInternally || _externalInputCreatedByProvider) && 
-                    _input is IDisposable disposable)
+                if (_inputCreatedInternally && _input is IDisposable disposable)
                 {
                     disposable.Dispose();
                 }
@@ -349,6 +376,9 @@ namespace TMBS.Runtime.Facade
             }
 
             _preview?.Hide();
+
+            _selectionChangedSubscription?.Dispose();
+            _selectionChangedSubscription = null;
 
             if (rootConfig != null &&
                 rootConfig.history != null &&
@@ -398,8 +428,12 @@ namespace TMBS.Runtime.Facade
                 return;
             }
 
-            if (IsMutating(intent.Type) && !_focus.CanConsumeMutating(instanceId, intent))
+            if (RequiresInputFocus(intent.Type) && !_focus.CanConsumeMutating(instanceId, intent))
+            {
+                _pipeline?.CancelActiveOperation();
+                _preview?.Hide();
                 return;
+            }
 
             var ctx = _pipeline.Process(instanceId, in intent);
 
@@ -407,6 +441,26 @@ namespace TMBS.Runtime.Facade
             {
                 _preview?.Hide();
                 return;
+            }
+
+            if (intent.Type == BuildIntentType.PointMove || intent.Type == BuildIntentType.DragUpdate)
+            {
+                if (_hasLastPreviewIntent &&
+                    _lastPreviewCell == ctx.Cell &&
+                    _lastPreviewIntent == intent.Type &&
+                    _lastPreviewAlternate == intent.AlternateBehaviour)
+                {
+                    return;
+                }
+                
+                _hasLastPreviewIntent = true;
+                _lastPreviewCell = ctx.Cell;
+                _lastPreviewIntent = intent.Type;
+                _lastPreviewAlternate = intent.AlternateBehaviour;
+            }
+            else
+            {
+                _hasLastPreviewIntent = false;
             }
 
             if (intent.Type != BuildIntentType.Confirm)
@@ -464,9 +518,12 @@ namespace TMBS.Runtime.Facade
             }
         }
 
-        private static bool IsMutating(BuildIntentType type)
+        private static bool RequiresInputFocus(BuildIntentType type)
         {
-            return type == BuildIntentType.Confirm;
+            return type == BuildIntentType.DragStart
+                   || type == BuildIntentType.DragUpdate
+                   || type == BuildIntentType.DragEnd
+                   || type == BuildIntentType.Confirm;
         }
     }
 }

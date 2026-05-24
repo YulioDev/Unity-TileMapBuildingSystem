@@ -30,6 +30,7 @@ namespace TMBS.Core.Preview
 
         public bool IsModeAllowed(IBuildMode mode)
         {
+            if (mode == null) return false;
             
             if (_globalPolicy == PreviewPolicy.StrictOff && mode.RequiresPreview)
             {

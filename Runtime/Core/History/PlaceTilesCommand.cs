@@ -1,3 +1,4 @@
+using System;
 using TMBS.Core.Metadata;
 using TMBS.Unity.Tilemaps;
 using UnityEngine;
@@ -7,85 +8,83 @@ namespace TMBS.Core.History
 {
     public sealed class PlaceTilesCommand : IImmediateCommand
     {
-        private readonly ITilemapWriteStrategy _writer;
-        private readonly IMetadataStore _metadata;
         private readonly Tilemap _tilemap;
-        private readonly BoundsInt _bounds;
-
-        private readonly TileBase[] _beforeTiles;
-        private readonly TileBase[] _afterTiles;
-
         private readonly TileChange[] _changes;
-
-        private readonly BuildRecord?[] _beforeMeta;
-        private readonly BuildRecord?[] _afterMeta;
-
-        private readonly bool _isSparse;
-        private readonly System.Action<BoundsInt> _onRegionModified;
+        private readonly IMetadataStore _metadata;
+        private readonly BoundsInt _bounds;
+        private readonly Action<BoundsInt> _onRegionModified;
 
         public PlaceTilesCommand(
-            ITilemapWriteStrategy writer,
-            IMetadataStore metadata,
             Tilemap tilemap,
-            BoundsInt bounds,
-            TileBase[] beforeTiles,
-            TileBase[] afterTiles,
-            BuildRecord?[] beforeMeta,
-            BuildRecord?[] afterMeta,
             TileChange[] changes,
-            bool isSparse,
-            System.Action<BoundsInt> onRegionModified = null)
+            IMetadataStore metadata,
+            BoundsInt bounds,
+            Action<BoundsInt> onRegionModified)
         {
-            _writer = writer;
-            _metadata = metadata;
             _tilemap = tilemap;
-            _bounds = bounds;
-            _beforeTiles = beforeTiles;
-            _afterTiles = afterTiles;
-            _beforeMeta = beforeMeta;
-            _afterMeta = afterMeta;
             _changes = changes;
-            _isSparse = isSparse;
+            _metadata = metadata;
+            _bounds = bounds;
             _onRegionModified = onRegionModified;
         }
 
-        public void Execute()
+        public void Execute() => Apply(true);
+        public void Undo() => Apply(false);
+        public void Redo() => Apply(true);
+
+        private void Apply(bool useAfter)
         {
-            if (_isSparse)
-                ApplySparse(true);
-            else
-                ApplyDense(true);
+            if (_changes == null || _changes.Length == 0)
+                return;
 
-            _onRegionModified?.Invoke(_bounds);
-        }
+            int totalCells = TMBS.Core.Grid.TileBlockIndex.Volume(_bounds);
+            
+            if (_changes.Length >= totalCells)
+            {
+                var tiles = new TileBase[totalCells];
+                for (int i = 0; i < _changes.Length; i++)
+                {
+                    var change = _changes[i];
+                    int index = TMBS.Core.Grid.TileBlockIndex.IndexOf(_bounds, change.Cell);
+                    tiles[index] = useAfter ? change.AfterTile : change.BeforeTile;
+                }
 
-        public void Undo()
-        {
-            if (_isSparse)
-                ApplySparse(false);
-            else
-                ApplyDense(false);
+                _tilemap.SetTilesBlock(_bounds, tiles);
 
-            _onRegionModified?.Invoke(_bounds);
-        }
+                if (_metadata != null)
+                {
+                    for (int i = 0; i < _changes.Length; i++)
+                    {
+                        var change = _changes[i];
+                        var meta = useAfter ? change.AfterMeta : change.BeforeMeta;
+                        if (!meta.HasValue)
+                            _metadata.Remove(change.Cell);
+                        else
+                            _metadata.Set(meta.Value);
+                    }
+                }
 
-        public void Redo()
-        {
-            Execute();
-        }
+                _onRegionModified?.Invoke(_bounds);
+                return;
+            }
 
-        private void ApplySparse(bool useAfter)
-        {
-            if (_changes == null) return;
-            var writes = new TileCellWrite[_changes.Length];
+            var positions = new Vector3Int[_changes.Length];
+            var tilesSparse = new TileBase[_changes.Length];
 
             for (int i = 0; i < _changes.Length; i++)
             {
                 var change = _changes[i];
-                writes[i] = new TileCellWrite(change.Cell, useAfter ? change.AfterTile : change.BeforeTile);
-                
-                if (_metadata != null)
+                positions[i] = change.Cell;
+                tilesSparse[i] = useAfter ? change.AfterTile : change.BeforeTile;
+            }
+
+            _tilemap.SetTiles(positions, tilesSparse);
+
+            if (_metadata != null)
+            {
+                for (int i = 0; i < _changes.Length; i++)
                 {
+                    var change = _changes[i];
                     var meta = useAfter ? change.AfterMeta : change.BeforeMeta;
                     if (!meta.HasValue)
                         _metadata.Remove(change.Cell);
@@ -94,27 +93,7 @@ namespace TMBS.Core.History
                 }
             }
 
-            _writer.Write(_tilemap, writes);
-        }
-
-        private void ApplyDense(bool useAfter)
-        {
-            _writer.Write(_tilemap, _bounds, useAfter ? _afterTiles : _beforeTiles);
-
-            if (_metadata == null || _beforeMeta == null) return;
-
-            var metaArray = useAfter ? _afterMeta : _beforeMeta;
-            
-            for (int i = 0; i < metaArray.Length; i++)
-            {
-                var m = metaArray[i];
-                Vector3Int cell = TMBS.Core.Grid.TileBlockIndex.CellAt(_bounds, i);
-
-                if (!m.HasValue)
-                    _metadata.Remove(cell);
-                else
-                    _metadata.Set(m.Value);
-            }
+            _onRegionModified?.Invoke(_bounds);
         }
     }
 }

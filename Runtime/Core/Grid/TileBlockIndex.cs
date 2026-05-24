@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace TMBS.Core.Grid
@@ -6,7 +7,10 @@ namespace TMBS.Core.Grid
     {
         public static int Volume(BoundsInt bounds)
         {
-            return bounds.size.x * bounds.size.y * bounds.size.z;
+            long volume = (long)bounds.size.x * bounds.size.y * bounds.size.z;
+            if (bounds.size.x < 0 || bounds.size.y < 0 || bounds.size.z < 0 || volume > int.MaxValue)
+                throw new InvalidOperationException("TMBS: Bounds volume is invalid or too large.");
+            return (int)volume;
         }
 
         public static Vector3Int CellAt(BoundsInt bounds, int index)
@@ -28,11 +32,15 @@ namespace TMBS.Core.Grid
 
         public static int IndexOf(BoundsInt bounds, Vector3Int cell)
         {
-            int x = cell.x - bounds.position.x;
-            int y = cell.y - bounds.position.y;
-            int z = cell.z - bounds.position.z;
+            long x = cell.x - bounds.position.x;
+            long y = cell.y - bounds.position.y;
+            long z = cell.z - bounds.position.z;
+            long index = (z * bounds.size.y + y) * bounds.size.x + x;
 
-            return (z * bounds.size.y + y) * bounds.size.x + x;
+            if (index < 0 || index > int.MaxValue)
+                throw new InvalidOperationException("TMBS: Computed tile index is invalid or too large.");
+
+            return (int)index;
         }
     }
 }

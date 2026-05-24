@@ -140,7 +140,7 @@ namespace TMBS.Core.Pipeline
             int maxX = a.x > b.x ? a.x : b.x;
             int maxY = a.y > b.y ? a.y : b.y;
 
-            var pos = new Vector3Int(minX, minY, 0);
+            var pos = new Vector3Int(minX, minY, a.z);
             var size = new Vector3Int((maxX - minX) + 1, (maxY - minY) + 1, 1);
             return new BoundsInt(pos, size);
         }
