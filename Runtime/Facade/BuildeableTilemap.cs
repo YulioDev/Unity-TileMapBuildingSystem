@@ -14,7 +14,6 @@ using TMBS.Core.Selection;
 using TMBS.Core.Validation;
 using TMBS.Runtime.Config;
 using TMBS.Unity.Preview;
-using TMBS.Unity.Tilemaps;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
@@ -25,14 +24,14 @@ namespace TMBS.Runtime.Facade
         [Header("Configuration Asset")]
         [Tooltip("The core configuration asset that defines rules, input, and performance settings.")]
         [SerializeField] private TmbsRootConfig rootConfig;
-        
+
         [Tooltip("Unique identifier for this building instance. Used to route events correctly.")]
         [SerializeField] private string instanceId = "TMBS_Instance";
 
         [Header("Scene References")]
         [Tooltip("The main tilemap where tiles will be placed.")]
         [SerializeField] private Tilemap targetTilemap;
-        
+
         [Tooltip("A temporary tilemap used to render build previews and validation feedback.")]
         [SerializeField] private Tilemap previewTilemap;
 
@@ -77,6 +76,11 @@ namespace TMBS.Runtime.Facade
         private bool _externalInputCreatedByProvider;
         private bool _inputCreatedInternally;
 
+        public void InvalidatePreviewCache()
+        {
+            _hasLastPreviewIntent = false;
+        }
+
         private void Update()
         {
             if (_input is ITickableInputAdapter tickable)
@@ -87,7 +91,8 @@ namespace TMBS.Runtime.Facade
 
         private Camera ResolveCamera()
         {
-            if (rootConfig == null) return Camera.main;
+            if (rootConfig == null)
+                return Camera.main;
 
             if (rootConfig.GetRuntimeCameraMode() == TmbsCameraMode.AlwaysMainCamera)
                 return Camera.main;
@@ -213,16 +218,14 @@ namespace TMBS.Runtime.Facade
 
         private IBuildInputAdapter CreateLegacyMouseInputAdapter()
         {
-            System.Func<UnityEngine.Plane> planeProvider = () =>
+            Func<Plane> planeProvider = () =>
             {
-                // Derive a construction plane from the target tilemap transform: plane normal points along -forward
                 var t = targetTilemap != null ? targetTilemap.transform : null;
-                if (t != null)
-                {
-                    return new UnityEngine.Plane(t.forward, t.position);
-                }
 
-                return new UnityEngine.Plane(Vector3.back, Vector3.zero);
+                if (t != null)
+                    return new Plane(t.forward, t.position);
+
+                return new Plane(Vector3.back, Vector3.zero);
             };
 
             return new TMBS.Unity.Input.LegacyMouseBuildInputAdapter(ResolveCamera, planeProvider);
@@ -235,7 +238,7 @@ namespace TMBS.Runtime.Facade
 
             if (_externalInputProvider != null &&
                 _externalInputProvider.TryCreateInputAdapter(
-                    new TMBS.Core.Input.BuildInputAdapterContext(instanceId),
+                    new BuildInputAdapterContext(instanceId),
                     out var adapter))
             {
                 _externalInputAdapter = adapter;
@@ -310,14 +313,15 @@ namespace TMBS.Runtime.Facade
             }
 
             var composition = new TmbsCompositionRoot();
+
             var context = composition.Compose(
-                rootConfig, 
-                instanceId, 
-                resolvedInput, 
-                targetTilemap, 
-                previewTilemap, 
+                rootConfig,
+                instanceId,
+                resolvedInput,
+                targetTilemap,
+                previewTilemap,
                 ResolveAttachedSceneValidators());
-                
+
             _input = context.Input;
             _pipeline = context.Pipeline;
             _events = context.Events;
@@ -329,7 +333,7 @@ namespace TMBS.Runtime.Facade
             _executor = context.Executor;
             _previewEvaluator = context.PreviewEvaluator;
             _activeMode = context.ActiveMode;
-            
+
             if (_events != null)
             {
                 _selectionChangedSubscription = _events.Subscribe<BuildSelectionChangedEvent>(OnBuildSelectionChanged);
@@ -376,6 +380,7 @@ namespace TMBS.Runtime.Facade
             }
 
             _preview?.Hide();
+            InvalidatePreviewCache();
 
             _selectionChangedSubscription?.Dispose();
             _selectionChangedSubscription = null;
@@ -394,7 +399,14 @@ namespace TMBS.Runtime.Facade
 
         private void OnBuildSelectionChanged(BuildSelectionChangedEvent evt)
         {
-            if (evt.InstanceId != instanceId) return;
+            if (evt.InstanceId != instanceId)
+                return;
+
+            if (_tileSelectionState == null || _preview == null)
+            {
+                Debug.LogError("TMBS: Selection changed before runtime context was fully composed.", this);
+                return;
+            }
 
             _tileSelectionState.UpdateFromSelection(evt.Selection);
 
@@ -402,6 +414,8 @@ namespace TMBS.Runtime.Facade
                 evt.Selection.ResolvedPreviewValid,
                 evt.Selection.ResolvedPreviewInvalid
             );
+
+            InvalidatePreviewCache();
         }
 
         private void OnBuildIntent(BuildIntent intent)
@@ -410,6 +424,7 @@ namespace TMBS.Runtime.Facade
             {
                 _pipeline?.CancelActiveOperation();
                 _preview?.Hide();
+                InvalidatePreviewCache();
 
                 if (rootConfig.history != null && rootConfig.history.enableUndoRedo)
                     _history?.TryUndo();
@@ -421,6 +436,7 @@ namespace TMBS.Runtime.Facade
             {
                 _pipeline?.CancelActiveOperation();
                 _preview?.Hide();
+                InvalidatePreviewCache();
 
                 if (rootConfig.history != null && rootConfig.history.enableUndoRedo)
                     _history?.TryRedo();
@@ -432,6 +448,7 @@ namespace TMBS.Runtime.Facade
             {
                 _pipeline?.CancelActiveOperation();
                 _preview?.Hide();
+                InvalidatePreviewCache();
                 return;
             }
 
@@ -440,6 +457,7 @@ namespace TMBS.Runtime.Facade
             if (intent.Type == BuildIntentType.Cancel)
             {
                 _preview?.Hide();
+                InvalidatePreviewCache();
                 return;
             }
 
@@ -452,7 +470,7 @@ namespace TMBS.Runtime.Facade
                 {
                     return;
                 }
-                
+
                 _hasLastPreviewIntent = true;
                 _lastPreviewCell = ctx.Cell;
                 _lastPreviewIntent = intent.Type;
@@ -481,6 +499,7 @@ namespace TMBS.Runtime.Facade
                     else
                     {
                         var single = new BoundsInt(ctx.Cell, Vector3Int.one);
+
                         if (ctx.Feedback.HasBlockedCells)
                         {
                             _preview.ShowRectMasked(single, ctx.Feedback.BlockedMask);
@@ -494,27 +513,47 @@ namespace TMBS.Runtime.Facade
                 else
                 {
                     _preview.Hide();
+                    InvalidatePreviewCache();
                 }
 
                 if (!ctx.QuickValidation.IsValid)
                 {
-                    var bounds = ctx.HasDragBounds ? ctx.DragBounds : new BoundsInt(ctx.Cell, Vector3Int.one);
-                    _events.Publish(new ValidationFailedEvent(instanceId, ctx.QuickValidation.Failure, ctx.Cell, bounds, ctx.Feedback.BlockedMask));
+                    var bounds = ctx.HasDragBounds
+                        ? ctx.DragBounds
+                        : new BoundsInt(ctx.Cell, Vector3Int.one);
+
+                    _events.Publish(new ValidationFailedEvent(
+                        instanceId,
+                        ctx.QuickValidation.Failure,
+                        ctx.Cell,
+                        bounds,
+                        ctx.Feedback.BlockedMask));
                 }
+
                 return;
             }
 
             if (!ctx.FullValidation.IsValid)
             {
-                var bounds = ctx.HasDragBounds ? ctx.DragBounds : new BoundsInt(ctx.Cell, Vector3Int.one);
-                _events.Publish(new ValidationFailedEvent(instanceId, ctx.FullValidation.Failure, ctx.Cell, bounds, ctx.FullValidation.Feedback.BlockedMask));
+                var bounds = ctx.HasDragBounds
+                    ? ctx.DragBounds
+                    : new BoundsInt(ctx.Cell, Vector3Int.one);
+
+                _events.Publish(new ValidationFailedEvent(
+                    instanceId,
+                    ctx.FullValidation.Failure,
+                    ctx.Cell,
+                    bounds,
+                    ctx.FullValidation.Feedback.BlockedMask));
+
                 return;
             }
 
-            if (ctx.Decision.Type == Core.Execution.ExecutionDecisionType.ExecuteImmediate)
+            if (ctx.Decision.Type == ExecutionDecisionType.ExecuteImmediate)
             {
                 _executor.Execute(in ctx, targetTilemap);
                 _preview.Hide();
+                InvalidatePreviewCache();
             }
         }
 

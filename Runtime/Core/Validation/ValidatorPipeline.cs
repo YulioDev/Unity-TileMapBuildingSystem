@@ -45,32 +45,39 @@ namespace TMBS.Core.Validation
 
                 if (result.Feedback.BlockedMask != null && result.Feedback.BlockedMask.AnyTrue())
                 {
-                    if (combinedBlocked == null) combinedBlocked = result.Feedback.BlockedMask.Clone();
-                    else combinedBlocked.OrInPlace(result.Feedback.BlockedMask);
+                    if (combinedBlocked == null)
+                        combinedBlocked = result.Feedback.BlockedMask.Clone();
+                    else
+                        combinedBlocked.OrInPlace(result.Feedback.BlockedMask);
                 }
 
                 if (result.WriteMask != null)
                 {
-                    if (combinedWrite == null) combinedWrite = result.WriteMask.Clone();
-                    else combinedWrite.AndInPlace(result.WriteMask);
+                    if (combinedWrite == null)
+                        combinedWrite = result.WriteMask.Clone();
+                    else
+                        combinedWrite.AndInPlace(result.WriteMask);
                 }
 
                 if (!result.IsValid)
                 {
                     isValid = false;
+
                     if (firstFailure == ValidationFailure.None)
                         firstFailure = result.Failure;
-                    
+
+                    // Full validation is fail-fast for execution.
+                    // Quick validation is exhaustive to collect preview feedback.
                     if (mode == ValidationMode.Full)
                         break;
                 }
             }
 
             var feedback = new ValidationFeedback(combinedBlocked);
-            
+
             if (!isValid)
                 return ValidationResult.InvalidWith(firstFailure, feedback, combinedWrite);
-            
+
             return ValidationResult.ValidWith(feedback, combinedWrite);
         }
     }

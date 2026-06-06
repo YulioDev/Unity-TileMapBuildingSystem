@@ -13,7 +13,25 @@ namespace TMBS.Unity.Input
             if (eventSystem == null)
                 return true;
 
-            return !eventSystem.IsPointerOverGameObject();
+            if (eventSystem.IsPointerOverGameObject())
+                return false;
+
+            int touchCount = UnityEngine.Input.touchCount;
+            for (int i = 0; i < touchCount; i++)
+            {
+                var touch = UnityEngine.Input.GetTouch(i);
+
+                if (touch.phase == UnityEngine.TouchPhase.Ended ||
+                    touch.phase == UnityEngine.TouchPhase.Canceled)
+                {
+                    continue;
+                }
+
+                if (eventSystem.IsPointerOverGameObject(touch.fingerId))
+                    return false;
+            }
+
+            return true;
         }
     }
 }

@@ -1,10 +1,8 @@
 using System;
-using System.Collections.Generic;
 using TMBS.Core.Events;
 using TMBS.Core.History;
 using TMBS.Core.Metadata;
 using TMBS.Core.Pipeline;
-using TMBS.Unity.Tilemaps;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
@@ -37,26 +35,27 @@ namespace TMBS.Core.Execution
                 return;
             }
 
-            var bounds = ctx.HasDragBounds ? ctx.DragBounds : new BoundsInt(ctx.Cell, Vector3Int.one);
+            var bounds = ctx.HasDragBounds
+                ? ctx.DragBounds
+                : new BoundsInt(ctx.Cell, Vector3Int.one);
+
             var writeMask = ctx.Decision.WriteMask ?? TMBS.Core.Validation.CellMask.AllTrue(bounds);
 
-            if (!writeMask.AnyTrue())
-                return;
-            
-            var expectedSize = writeMask.Bounds.size;
-            if (bounds.size != expectedSize)
+            if (writeMask.Bounds.position != bounds.position ||
+                writeMask.Bounds.size != bounds.size)
             {
                 Debug.LogError("TMBS: WriteMask bounds mismatch. Aborting execution to prevent corrupted writes.");
                 return;
             }
 
+            if (!writeMask.AnyTrue())
+                return;
+
             int trueCount = 0;
             for (int i = 0; i < writeMask.Bits.Length; i++)
             {
                 if (writeMask.Bits[i])
-                {
                     trueCount++;
-                }
             }
 
             var changes = new TileChange[trueCount];
@@ -70,18 +69,18 @@ namespace TMBS.Core.Execution
                     for (int x = 0; x < bounds.size.x; x++)
                     {
                         var cell = bounds.position + new Vector3Int(x, y, z);
-                        
+
                         if (writeMask.Bits[writeMask.IndexOf(cell)])
                         {
                             int blockIndex = TMBS.Core.Grid.TileBlockIndex.IndexOf(bounds, cell);
                             var beforeTile = beforeTiles[blockIndex];
-                            var afterTile = ctx.AlternateBehaviour ? ctx.Decision.AlternateWriteTile : ctx.Decision.WriteTile;
+                            var afterTile = ctx.AlternateBehaviour
+                                ? ctx.Decision.AlternateWriteTile
+                                : ctx.Decision.WriteTile;
 
                             BuildRecord? beforeMeta = null;
                             if (_metadata != null && _metadata.TryGet(cell, out var record))
-                            {
                                 beforeMeta = record;
-                            }
 
                             BuildRecord? afterMeta = null;
                             if (afterTile != null && ctx.Decision.ConstructionId > 0)
@@ -92,7 +91,12 @@ namespace TMBS.Core.Execution
                                     BuildState.Completed);
                             }
 
-                            changes[changeIndex++] = new TileChange(cell, beforeTile, afterTile, beforeMeta, afterMeta);
+                            changes[changeIndex++] = new TileChange(
+                                cell,
+                                beforeTile,
+                                afterTile,
+                                beforeMeta,
+                                afterMeta);
                         }
                     }
                 }
@@ -108,13 +112,9 @@ namespace TMBS.Core.Execution
                 _emitRegionModifiedEvents ? (b) => NotifyRegionModified(instanceId, b) : (Action<BoundsInt>)null);
 
             if (_history != null)
-            {
                 _history.Push(command);
-            }
             else
-            {
                 command.Execute();
-            }
         }
 
         private void NotifyRegionModified(string instanceId, BoundsInt bounds)

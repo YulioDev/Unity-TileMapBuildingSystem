@@ -1,11 +1,15 @@
-using System;
 using UnityEngine;
 
 namespace TMBS.Core.Validation
 {
     public enum ValidationMode
     {
+        // Preview/update path. ValidatorPipeline intentionally evaluates all validators
+        // so feedback and write masks can be combined.
         Quick,
+
+        // Final execution path. ValidatorPipeline stops at the first invalid result.
+        // Do not rename without a breaking API migration because IValidator exposes this enum.
         Full
     }
 
@@ -19,10 +23,6 @@ namespace TMBS.Core.Validation
 
     public readonly struct ValidationFeedback
     {
-        
-        
-        
-        
         public readonly CellMask BlockedMask;
 
         public ValidationFeedback(CellMask blockedMask)
@@ -37,19 +37,14 @@ namespace TMBS.Core.Validation
     {
         public readonly bool IsValid;
         public readonly ValidationFailure Failure;
-
-        
-        
-        
         public readonly ValidationFeedback Feedback;
-
-        
-        
-        
-        
         public readonly CellMask WriteMask;
 
-        public ValidationResult(bool isValid, ValidationFailure failure, ValidationFeedback feedback, CellMask writeMask)
+        public ValidationResult(
+            bool isValid,
+            ValidationFailure failure,
+            ValidationFeedback feedback,
+            CellMask writeMask)
         {
             IsValid = isValid;
             Failure = failure;
@@ -57,7 +52,8 @@ namespace TMBS.Core.Validation
             WriteMask = writeMask;
         }
 
-        public static ValidationResult Valid => new ValidationResult(true, ValidationFailure.None, default, null);
+        public static ValidationResult Valid =>
+            new ValidationResult(true, ValidationFailure.None, default, null);
 
         public static ValidationResult Invalid(ValidationFailure failure) =>
             new ValidationResult(false, failure, default, null);
@@ -68,7 +64,10 @@ namespace TMBS.Core.Validation
         public static ValidationResult ValidWith(ValidationFeedback feedback, CellMask writeMask = null) =>
             new ValidationResult(true, ValidationFailure.None, feedback, writeMask);
 
-        public static ValidationResult InvalidWith(ValidationFailure failure, ValidationFeedback feedback, CellMask writeMask = null) =>
+        public static ValidationResult InvalidWith(
+            ValidationFailure failure,
+            ValidationFeedback feedback,
+            CellMask writeMask = null) =>
             new ValidationResult(false, failure, feedback, writeMask);
     }
 

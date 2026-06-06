@@ -1,6 +1,5 @@
 using System;
 using TMBS.Core.Metadata;
-using TMBS.Unity.Tilemaps;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
@@ -34,40 +33,62 @@ namespace TMBS.Core.History
 
         private void Apply(bool useAfter)
         {
+            if (_tilemap == null)
+            {
+                Debug.LogError("TMBS: Cannot apply tile command. Tilemap is null.");
+                return;
+            }
+
             if (_changes == null || _changes.Length == 0)
                 return;
 
             int totalCells = TMBS.Core.Grid.TileBlockIndex.Volume(_bounds);
-            
-            if (_changes.Length >= totalCells)
+
+            if (!ValidateChangesInsideBounds())
+                return;
+
+            if (_changes.Length == totalCells)
             {
-                var tiles = new TileBase[totalCells];
-                for (int i = 0; i < _changes.Length; i++)
-                {
-                    var change = _changes[i];
-                    int index = TMBS.Core.Grid.TileBlockIndex.IndexOf(_bounds, change.Cell);
-                    tiles[index] = useAfter ? change.AfterTile : change.BeforeTile;
-                }
-
-                _tilemap.SetTilesBlock(_bounds, tiles);
-
-                if (_metadata != null)
-                {
-                    for (int i = 0; i < _changes.Length; i++)
-                    {
-                        var change = _changes[i];
-                        var meta = useAfter ? change.AfterMeta : change.BeforeMeta;
-                        if (!meta.HasValue)
-                            _metadata.Remove(change.Cell);
-                        else
-                            _metadata.Set(meta.Value);
-                    }
-                }
-
-                _onRegionModified?.Invoke(_bounds);
+                ApplyBatch(useAfter, totalCells);
                 return;
             }
 
+            ApplySparse(useAfter);
+        }
+
+        private bool ValidateChangesInsideBounds()
+        {
+            for (int i = 0; i < _changes.Length; i++)
+            {
+                if (!_bounds.Contains(_changes[i].Cell))
+                {
+                    Debug.LogError("TMBS: TileChange cell is outside command bounds. Aborting command to prevent corrupted writes.");
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private void ApplyBatch(bool useAfter, int totalCells)
+        {
+            var tiles = new TileBase[totalCells];
+
+            for (int i = 0; i < _changes.Length; i++)
+            {
+                var change = _changes[i];
+                int index = TMBS.Core.Grid.TileBlockIndex.IndexOf(_bounds, change.Cell);
+                tiles[index] = useAfter ? change.AfterTile : change.BeforeTile;
+            }
+
+            _tilemap.SetTilesBlock(_bounds, tiles);
+
+            ApplyMetadata(useAfter);
+            _onRegionModified?.Invoke(_bounds);
+        }
+
+        private void ApplySparse(bool useAfter)
+        {
             var positions = new Vector3Int[_changes.Length];
             var tilesSparse = new TileBase[_changes.Length];
 
@@ -80,20 +101,25 @@ namespace TMBS.Core.History
 
             _tilemap.SetTiles(positions, tilesSparse);
 
-            if (_metadata != null)
-            {
-                for (int i = 0; i < _changes.Length; i++)
-                {
-                    var change = _changes[i];
-                    var meta = useAfter ? change.AfterMeta : change.BeforeMeta;
-                    if (!meta.HasValue)
-                        _metadata.Remove(change.Cell);
-                    else
-                        _metadata.Set(meta.Value);
-                }
-            }
-
+            ApplyMetadata(useAfter);
             _onRegionModified?.Invoke(_bounds);
+        }
+
+        private void ApplyMetadata(bool useAfter)
+        {
+            if (_metadata == null)
+                return;
+
+            for (int i = 0; i < _changes.Length; i++)
+            {
+                var change = _changes[i];
+                var meta = useAfter ? change.AfterMeta : change.BeforeMeta;
+
+                if (!meta.HasValue)
+                    _metadata.Remove(change.Cell);
+                else
+                    _metadata.Set(meta.Value);
+            }
         }
     }
 }

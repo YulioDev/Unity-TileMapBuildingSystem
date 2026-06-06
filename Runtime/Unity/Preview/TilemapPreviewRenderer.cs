@@ -14,7 +14,8 @@ namespace TMBS.Unity.Preview
         private bool _hasLast;
         private TileBase _lastTile;
 
-        private TileBase[] _buffer;     
+        private TileBase[] _buffer;
+        private TileBase[] _clearBuffer;
 
         public TilemapPreviewRenderer(Tilemap tilemap, TileBase valid, TileBase invalid)
         {
@@ -29,7 +30,7 @@ namespace TMBS.Unity.Preview
         public void UpdateTiles(TileBase valid, TileBase invalid)
         {
             Hide();
-            _valid   = valid;
+            _valid = valid;
             _invalid = invalid;
         }
 
@@ -67,8 +68,8 @@ namespace TMBS.Unity.Preview
 
             for (int i = 0; i < len; i++)
             {
-                
                 Vector3Int pos = CellAt(fullArea, i);
+
                 bool isBlocked = sameBounds
                     ? blockedMask.Bits[i]
                     : (blockedMask.Contains(pos) && blockedMask.Bits[blockedMask.IndexOf(pos)]);
@@ -79,22 +80,27 @@ namespace TMBS.Unity.Preview
             _tilemap.SetTilesBlock(fullArea, _buffer);
             _last = fullArea;
             _hasLast = true;
-            _lastTile = null; 
+            _lastTile = null;
         }
 
         public void Hide()
         {
-            _tilemap.ClearAllTiles();
-            _hasLast = false;
-            _lastTile = null;
+            ClearPrevious();
         }
 
         private void ClearPrevious()
         {
-            if (!_hasLast) return;
-            
-            _tilemap.ClearAllTiles();
+            if (!_hasLast)
+                return;
+
+            int len = Volume(_last);
+            EnsureClearBuffer(len);
+            FillArray(_clearBuffer, len, null);
+
+            _tilemap.SetTilesBlock(_last, _clearBuffer);
+
             _hasLast = false;
+            _lastTile = null;
         }
 
         private void UpdateIncremental(BoundsInt next, bool valid)
@@ -109,7 +115,7 @@ namespace TMBS.Unity.Preview
             int len = Volume(next);
             EnsureBuffer(len);
             FillArray(_buffer, len, tile);
-            
+
             _tilemap.SetTilesBlock(next, _buffer);
             _last = next;
             _hasLast = true;
@@ -120,6 +126,12 @@ namespace TMBS.Unity.Preview
         {
             if (_buffer == null || _buffer.Length != len)
                 _buffer = new TileBase[len];
+        }
+
+        private void EnsureClearBuffer(int len)
+        {
+            if (_clearBuffer == null || _clearBuffer.Length != len)
+                _clearBuffer = new TileBase[len];
         }
 
         private static void FillArray(TileBase[] arr, int len, TileBase tile)

@@ -17,7 +17,12 @@ namespace TMBS.Core.Pipeline
         private Vector3Int _dragStartCell;
         private bool _hasDragStart;
 
-        public BuildPipeline(IGridSpace gridSpace, ValidatorPipeline validatorPipeline, IExecutionRouter router, List<IPipelineStep> steps, bool clampDragBounds)
+        public BuildPipeline(
+            IGridSpace gridSpace,
+            ValidatorPipeline validatorPipeline,
+            IExecutionRouter router,
+            List<IPipelineStep> steps,
+            bool clampDragBounds)
         {
             _gridSpace = gridSpace;
             _validatorPipeline = validatorPipeline;
@@ -34,6 +39,7 @@ namespace TMBS.Core.Pipeline
         public PipelineContext Process(string instanceId, in BuildIntent intent)
         {
             var cell = _gridSpace.WorldToCell(intent.WorldPoint);
+
             var ctx = new PipelineContext(
                 instanceId,
                 intent.WorldPoint,
@@ -53,7 +59,9 @@ namespace TMBS.Core.Pipeline
                 _dragStartCell = cell;
                 _hasDragStart = true;
             }
-            else if (intent.Type == BuildIntentType.DragUpdate || intent.Type == BuildIntentType.DragEnd || intent.Type == BuildIntentType.Confirm)
+            else if (intent.Type == BuildIntentType.DragUpdate ||
+                     intent.Type == BuildIntentType.DragEnd ||
+                     intent.Type == BuildIntentType.Confirm)
             {
                 if (_hasDragStart)
                 {
@@ -64,6 +72,7 @@ namespace TMBS.Core.Pipeline
             else if (intent.Type == BuildIntentType.Cancel)
             {
                 _hasDragStart = false;
+                return ctx;
             }
 
             for (int i = 0; i < _steps.Count; i++)
@@ -94,7 +103,8 @@ namespace TMBS.Core.Pipeline
 
         private PipelineContext ApplyBoundsClamp(PipelineContext ctx)
         {
-            if (!ctx.HasDragBounds) return ctx;
+            if (!ctx.HasDragBounds)
+                return ctx;
 
             BoundsInt globalBounds = default;
             bool found = false;
@@ -108,7 +118,8 @@ namespace TMBS.Core.Pipeline
                 }
             }
 
-            if (!found) return ctx;
+            if (!found)
+                return ctx;
 
             var b = ctx.DragBounds;
 
@@ -142,6 +153,7 @@ namespace TMBS.Core.Pipeline
 
             var pos = new Vector3Int(minX, minY, a.z);
             var size = new Vector3Int((maxX - minX) + 1, (maxY - minY) + 1, 1);
+
             return new BoundsInt(pos, size);
         }
     }
