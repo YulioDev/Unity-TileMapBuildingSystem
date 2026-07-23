@@ -10,20 +10,32 @@ namespace TMBS.Core.Validation
     
     public sealed class CellMask
     {
-        public BoundsInt Bounds { get; }
-        public bool[] Bits { get; }
-        public int Length => Bits.Length;
+        public BoundsInt Bounds { get; private set; }
+        public bool[] Bits { get; private set; }
+        public int Length { get; private set; }
 
         public CellMask(BoundsInt bounds, bool defaultValue)
         {
-            Bounds = bounds;
+            Reset(bounds, defaultValue);
+        }
 
-            int len = TileBlockIndex.Volume(bounds);
-            Bits = new bool[len];
+        public void Reset(BoundsInt bounds, bool defaultValue)
+        {
+            Bounds = bounds;
+            Length = TileBlockIndex.Volume(bounds);
+
+            if (Bits == null || Bits.Length < Length)
+            {
+                Bits = new bool[Math.Max(Length, 64)]; // Min capacity 64
+            }
 
             if (defaultValue)
             {
-                for (int i = 0; i < len; i++) Bits[i] = true;
+                for (int i = 0; i < Length; i++) Bits[i] = true;
+            }
+            else
+            {
+                Array.Clear(Bits, 0, Length);
             }
         }
 
@@ -47,7 +59,7 @@ namespace TMBS.Core.Validation
 
         public bool AnyTrue()
         {
-            for (int i = 0; i < Bits.Length; i++)
+            for (int i = 0; i < Length; i++)
                 if (Bits[i]) return true;
             return false;
         }
@@ -55,21 +67,21 @@ namespace TMBS.Core.Validation
         public CellMask Clone()
         {
             var clone = new CellMask(Bounds, false);
-            Array.Copy(Bits, clone.Bits, Bits.Length);
+            Array.Copy(Bits, clone.Bits, Length);
             return clone;
         }
 
         public void OrInPlace(CellMask other)
         {
             EnsureSameBounds(other);
-            for (int i = 0; i < Bits.Length; i++)
+            for (int i = 0; i < Length; i++)
                 Bits[i] = Bits[i] || other.Bits[i];
         }
 
         public void AndInPlace(CellMask other)
         {
             EnsureSameBounds(other);
-            for (int i = 0; i < Bits.Length; i++)
+            for (int i = 0; i < Length; i++)
                 Bits[i] = Bits[i] && other.Bits[i];
         }
 

@@ -63,7 +63,6 @@ namespace TMBS.Unity.Input
             }
             else
             {
-                // Fallback to previous behavior if raycast fails
                 mouseWorldPos = camera.ScreenToWorldPoint(UnityEngine.Input.mousePosition);
                 mouseWorldPos.z = 0f;
             }
@@ -94,7 +93,12 @@ namespace TMBS.Unity.Input
 
             if (UnityEngine.Input.GetMouseButtonDown(1))
             {
+                if (_isDragging)
+                {
+                    BuildIntentRaised?.Invoke(new BuildIntent(BuildIntentType.DragEnd, mouseWorldPos, _dragAlternate));
+                }
                 _isDragging = false;
+                _dragAlternate = false;
                 BuildIntentRaised?.Invoke(new BuildIntent(BuildIntentType.Cancel, mouseWorldPos, false));
                 return;
             }

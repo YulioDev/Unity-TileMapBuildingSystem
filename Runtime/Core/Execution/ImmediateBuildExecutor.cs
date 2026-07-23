@@ -38,7 +38,7 @@ namespace TMBS.Core.Execution
             }
 
             var bounds = ctx.HasDragBounds ? ctx.DragBounds : new BoundsInt(ctx.Cell, Vector3Int.one);
-            var writeMask = ctx.Decision.WriteMask ?? TMBS.Core.Validation.CellMask.AllTrue(bounds);
+            var writeMask = ctx.Decision.WriteMask ?? TMBS.Core.Validation.CellMaskPool.Rent(bounds, true);
 
             if (!writeMask.AnyTrue())
                 return;
@@ -51,7 +51,7 @@ namespace TMBS.Core.Execution
             }
 
             int trueCount = 0;
-            for (int i = 0; i < writeMask.Bits.Length; i++)
+            for (int i = 0; i < writeMask.Length; i++)
             {
                 if (writeMask.Bits[i])
                 {

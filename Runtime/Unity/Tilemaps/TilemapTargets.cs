@@ -10,6 +10,8 @@ namespace TMBS.Unity.Tilemaps
         {
             Tilemap = tilemap;
         }
+
+        public bool IsValid => Tilemap != null;
     }
 }
 

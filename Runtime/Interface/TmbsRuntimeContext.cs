@@ -11,7 +11,7 @@ using TMBS.Core.Preview;
 using TMBS.Core.Selection;
 using TMBS.Unity.Preview;
 
-namespace TMBS.Runtime.Facade
+namespace TMBS.Runtime.Interface
 {
     public sealed class TmbsRuntimeContext
     {

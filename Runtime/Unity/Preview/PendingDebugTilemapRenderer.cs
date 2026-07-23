@@ -12,14 +12,16 @@ namespace TMBS.Unity.Preview
 
         public PendingDebugTilemapRenderer(Tilemap tilemap, TmbsTileArchetypeConfig archetype)
         {
-            _tilemap = tilemap;
-            _archetype = archetype;
+            _tilemap = tilemap != null ? tilemap : throw new System.ArgumentNullException(nameof(tilemap));
+            _archetype = archetype != null ? archetype : throw new System.ArgumentNullException(nameof(archetype));
         }
-
+        
         public void Clear()
         {
             if (_tilemap != null)
+            {
                 _tilemap.ClearAllTiles();
+            }
         }
 
         public void RenderCell(PendingConstructionCell cell, PendingConstructionState state)
@@ -53,6 +55,8 @@ namespace TMBS.Unity.Preview
                     return _archetype.ResolveReadyTile();
                 case PendingConstructionState.InProgress:
                     return _archetype.ResolveInProgressTile();
+                case PendingConstructionState.Completed:
+                    return null;
                 case PendingConstructionState.Cancelled:
                     return _archetype.ResolveInvalidTile();
                 default:
@@ -70,6 +74,8 @@ namespace TMBS.Unity.Preview
                     return _archetype.readyColor;
                 case PendingConstructionState.InProgress:
                     return _archetype.inProgressColor;
+                case PendingConstructionState.Completed:
+                    return Color.clear;
                 case PendingConstructionState.Cancelled:
                     return _archetype.invalidColor;
                 default:

@@ -16,22 +16,6 @@ namespace TMBS.Core.Validation
 
         public int InternalValidatorsCount => _validators.Count;
 
-        public bool TryGetBounds(int index, out UnityEngine.BoundsInt bounds)
-        {
-            bounds = default;
-
-            if (index < 0 || index >= _validators.Count)
-                return false;
-
-            if (_validators[index] is BoundsValidator b)
-            {
-                bounds = b.allowedBounds;
-                return true;
-            }
-
-            return false;
-        }
-
         public ValidationResult Validate(in PipelineContext ctx, ValidationMode mode)
         {
             CellMask combinedBlocked = null;
@@ -45,13 +29,13 @@ namespace TMBS.Core.Validation
 
                 if (result.Feedback.BlockedMask != null && result.Feedback.BlockedMask.AnyTrue())
                 {
-                    if (combinedBlocked == null) combinedBlocked = result.Feedback.BlockedMask.Clone();
+                    if (combinedBlocked == null) combinedBlocked = result.Feedback.BlockedMask;
                     else combinedBlocked.OrInPlace(result.Feedback.BlockedMask);
                 }
 
                 if (result.WriteMask != null)
                 {
-                    if (combinedWrite == null) combinedWrite = result.WriteMask.Clone();
+                    if (combinedWrite == null) combinedWrite = result.WriteMask;
                     else combinedWrite.AndInPlace(result.WriteMask);
                 }
 

@@ -18,8 +18,8 @@ namespace TMBS.Core.Validation
             var opBounds = ValidationUtil.GetOperationBounds(in ctx);
             int len = opBounds.size.x * opBounds.size.y * opBounds.size.z;
 
-            var blocked = CellMask.AllFalse(opBounds);
-            var write = CellMask.AllTrue(opBounds);
+            var blocked = CellMaskPool.Rent(opBounds, false);
+            var write = CellMaskPool.Rent(opBounds, true);
 
             bool anyBlocked = false;
             for (int i = 0; i < len; i++)

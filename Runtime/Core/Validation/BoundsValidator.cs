@@ -32,8 +32,8 @@ namespace TMBS.Core.Validation
             if (w <= 0 || h <= 0 || d <= 0)
                 return ValidationResult.Valid;
 
-            CellMask blocked = markBlockedArea ? CellMask.AllFalse(opBounds) : null;
-            CellMask write = CellMask.AllTrue(opBounds);
+            CellMask blocked = markBlockedArea ? CellMaskPool.Rent(opBounds, false) : null;
+            CellMask write = CellMaskPool.Rent(opBounds, true);
 
             bool anyOut = false;
             bool anyIn = false;

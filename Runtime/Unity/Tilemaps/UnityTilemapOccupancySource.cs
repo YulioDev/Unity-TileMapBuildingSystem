@@ -10,6 +10,7 @@ namespace TMBS.Unity.Tilemaps
 
         public UnityTilemapOccupancySource(Tilemap tilemap)
         {
+            if (tilemap == null) throw new System.ArgumentNullException(nameof(tilemap));
             _tilemap = tilemap;
         }
 

@@ -17,7 +17,7 @@ namespace TMBS.Core.Validation
                     var opBounds = ValidationUtil.GetOperationBounds(in ctx);
                     return ValidationResult.InvalidWith(
                         ValidationFailure.MissingSelection, 
-                        new ValidationFeedback(CellMask.AllTrue(opBounds))
+                        new ValidationFeedback(CellMaskPool.Rent(opBounds, true))
                     );
                 }
 

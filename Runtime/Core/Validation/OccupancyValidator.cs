@@ -67,10 +67,10 @@ namespace TMBS.Core.Validation
             bool anyOccupied = false;
 
             if (skipOccupiedCells)
-                write = CellMask.AllTrue(opBounds);
+                write = CellMaskPool.Rent(opBounds, true);
 
             if (markBlockedArea)
-                blocked = CellMask.AllFalse(opBounds);
+                blocked = CellMaskPool.Rent(opBounds, false);
 
             for (int i = 0; i < opBounds.size.x * opBounds.size.y * opBounds.size.z; i++)
             {

@@ -36,6 +36,35 @@ MonoBehaviour:
   historyCapacity: -1
   metadataInitialCapacity: 4096
   clampDragBoundsToBoundsValidator: 0
+  pendingConstruction:
+    groupingMode: 0
+    costMode: 0
+    resourcePolicy: 2
+    fixedWorkPerCell: 1
+    fixedResourceCostPerCell: 1
+    replaceExistingPending: 0
+    allowPartialCompletion: 1
+    createPendingForAlternateBehaviour: 0
+    emitPendingEvents: 1
+  pendingDebug:
+    enabled: 0
+    workPerStep: 256
+    cellsPerStep: 1
+    autoDeliverResources: 1
+    buildOrder: 0
+    renderDebugTiles: 1
+    tileArchetype:
+      baseTile: {fileID: 11400000, guid: 180f55a6f11b7d54e828326e9f02054a, type: 2}
+      pendingTile: {fileID: 11400000, guid: 50202cb830faae04ba588237a9a8923b, type: 2}
+      waitingResourcesTile: {fileID: 0}
+      readyTile: {fileID: 0}
+      inProgressTile: {fileID: 0}
+      invalidTile: {fileID: 0}
+      pendingColor: {r: 1, g: 1, b: 1, a: 0.35}
+      waitingResourcesColor: {r: 1, g: 0.65, b: 0.15, a: 0.45}
+      readyColor: {r: 0.25, g: 1, b: 0.25, a: 0.5}
+      inProgressColor: {r: 0.25, g: 0.6, b: 1, a: 0.65}
+      invalidColor: {r: 1, g: 0.1, b: 0.1, a: 0.55}
   validators:
   - enabled: 1
     validator:
@@ -55,8 +84,8 @@ MonoBehaviour:
         allowOverwrite: 1
         skipOccupiedCells: 1
         markBlockedArea: 1
-        validateAlternateBehaviour: 0
-        occupancySourceMode: 0
+        validateAlternateBehaviour: 1
+        occupancySourceMode: 1
     - rid: 7190439193056116805
       type: {class: SelectionValidator, ns: TMBS.Core.Validation, asm: Assembly-CSharp}
       data:

@@ -9,7 +9,11 @@ namespace TMBS.Core.Grid
         {
             long volume = (long)bounds.size.x * bounds.size.y * bounds.size.z;
             if (bounds.size.x < 0 || bounds.size.y < 0 || bounds.size.z < 0 || volume > int.MaxValue)
-                throw new InvalidOperationException("TMBS: Bounds volume is invalid or too large.");
+            {
+                Debug.LogWarning("TileBlockIndex: Bounds volume are invalid or too large.");
+                // Maxvalue as a backstop
+                return int.MaxValue;
+            }
             return (int)volume;
         }
 

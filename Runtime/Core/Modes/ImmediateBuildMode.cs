@@ -15,9 +15,7 @@ namespace TMBS.Core.Modes
             
             if (intent.AlternateBehaviour)
             {
-                
-                
-                return ctx.WithTile(null);
+                ctx.SelectedTile = null;
             }
 
             return ctx;

@@ -9,7 +9,6 @@ using TMBS.Core.Metadata;
 using TMBS.Core.Modes;
 using TMBS.Core.Pending;
 using TMBS.Core.Pipeline;
-using TMBS.Core.Pipeline.Steps;
 using TMBS.Core.Preview;
 using TMBS.Core.Selection;
 using TMBS.Core.Validation;
@@ -20,7 +19,7 @@ using TMBS.Unity.Tilemaps;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
-namespace TMBS.Runtime.Facade
+namespace TMBS.Runtime.Interface
 {
     public sealed class TmbsCompositionRoot
     {
@@ -52,8 +51,6 @@ namespace TMBS.Runtime.Facade
 
             IGridSpace gridSpace = new UnityGridSpace(targetTilemap);
 
-            // Catalog creation removed: not used in current composition flow
-
             var tileSelectionState = new TileSelectionState();
             var selectionState = tileSelectionState;
 
@@ -62,6 +59,8 @@ namespace TMBS.Runtime.Facade
             IBuildExecutor executor;
             IPendingConstructionStore pendingStore = null;
             IPendingConstructionWorkApi pendingWorkApi = null;
+            PendingDebugBuilder pendingDebugBuilder = null;
+            BoundsInt? globalBounds = null;
 
             switch (config.executionMode)
             {
@@ -73,6 +72,11 @@ namespace TMBS.Runtime.Facade
                     executor = new PendingBuildExecutor(pendingStore, events, pendingConfig);
                     pendingWorkApi = new DefaultPendingConstructionWorkApi(
                         pendingStore, events, targetTilemap, metadata, instanceId);
+
+                    var debugConfig = config.GetRuntimePendingDebugConfig();
+                    pendingDebugBuilder = debugConfig.enabled
+                        ? new PendingDebugBuilder(pendingWorkApi, debugConfig)
+                        : null;
                     break;
                 }
                 case ExecutionMode.Immediate:
@@ -102,6 +106,11 @@ namespace TMBS.Runtime.Facade
                     var v = entry.validator;
                     if (v == null)
                         continue;
+
+                    if (v is BoundsValidator bv)
+                    {
+                        globalBounds = bv.allowedBounds;
+                    }
 
                     if (v is IInjectableValidator injectable)
                     {
@@ -142,13 +151,14 @@ namespace TMBS.Runtime.Facade
 
             var validatorPipeline = new ValidatorPipeline(validators);
 
-            var steps = new List<IPipelineStep>
-            {
-                new TileInjectionStep(tileSelectionState),
-                new ModeInterpretationStep(activeMode)
-            };
-
-            var pipeline = new BuildPipeline(gridSpace, validatorPipeline, router, steps, config.GetRuntimeClampDragBoundsToBoundsValidator());
+            var pipeline = new BuildPipeline(
+                gridSpace, 
+                validatorPipeline, 
+                router, 
+                tileSelectionState, 
+                activeMode, 
+                config.GetRuntimeClampDragBoundsToBoundsValidator(), 
+                globalBounds);
 
             var preview = new TilemapPreviewRenderer(previewTilemap, config.previewValidTile, config.previewInvalidTile);
 
@@ -166,17 +176,6 @@ namespace TMBS.Runtime.Facade
                 activeMode,
                 pendingWorkApi,
                 pendingDebugBuilder);
-        }
-    }
-}               focus,
-                history,
-                metadata,
-                preview,
-                selectionState,
-                executor,
-                previewEvaluator,
-                activeMode,
-                pendingWorkApi);
         }
     }
 }

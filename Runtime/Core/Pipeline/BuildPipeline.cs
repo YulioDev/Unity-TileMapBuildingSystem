@@ -12,18 +12,30 @@ namespace TMBS.Core.Pipeline
         private readonly IGridSpace _gridSpace;
         private readonly ValidatorPipeline _validatorPipeline;
         private readonly IExecutionRouter _router;
-        private readonly List<IPipelineStep> _steps;
+        private readonly TMBS.Core.Selection.TileSelectionState _selectionState;
+        private readonly TMBS.Core.Modes.IBuildMode _activeMode;
         private readonly bool _clampDragBounds;
+        private readonly BoundsInt? _globalBounds;
         private Vector3Int _dragStartCell;
         private bool _hasDragStart;
+        private readonly PipelineContext _ctx = new PipelineContext();
 
-        public BuildPipeline(IGridSpace gridSpace, ValidatorPipeline validatorPipeline, IExecutionRouter router, List<IPipelineStep> steps, bool clampDragBounds)
+        public BuildPipeline(
+            IGridSpace gridSpace, 
+            ValidatorPipeline validatorPipeline, 
+            IExecutionRouter router, 
+            TMBS.Core.Selection.TileSelectionState selectionState, 
+            TMBS.Core.Modes.IBuildMode activeMode, 
+            bool clampDragBounds,
+            BoundsInt? globalBounds)
         {
             _gridSpace = gridSpace;
             _validatorPipeline = validatorPipeline;
             _router = router;
-            _steps = steps;
+            _selectionState = selectionState;
+            _activeMode = activeMode;
             _clampDragBounds = clampDragBounds;
+            _globalBounds = globalBounds;
         }
 
         public void CancelActiveOperation()
@@ -34,7 +46,8 @@ namespace TMBS.Core.Pipeline
         public PipelineContext Process(string instanceId, in BuildIntent intent)
         {
             var cell = _gridSpace.WorldToCell(intent.WorldPoint);
-            var ctx = new PipelineContext(
+            
+            _ctx.Reset(
                 instanceId,
                 intent.WorldPoint,
                 cell,
@@ -58,7 +71,8 @@ namespace TMBS.Core.Pipeline
                 if (_hasDragStart)
                 {
                     var bounds = ComputeRectBounds(_dragStartCell, cell);
-                    ctx = ctx.WithDragBounds(bounds);
+                    _ctx.DragBounds = bounds;
+                    _ctx.HasDragBounds = true;
                 }
             }
             else if (intent.Type == BuildIntentType.Cancel)
@@ -66,51 +80,45 @@ namespace TMBS.Core.Pipeline
                 _hasDragStart = false;
             }
 
-            for (int i = 0; i < _steps.Count; i++)
+            if (!intent.AlternateBehaviour && _selectionState != null)
             {
-                ctx = _steps[i].Execute(in ctx, in intent);
+                _ctx.SelectedTile = _selectionState.CurrentTile;
             }
 
-            if (_clampDragBounds && ctx.HasDragBounds)
+            if (_activeMode != null)
             {
-                ctx = ApplyBoundsClamp(ctx);
+                var interpreted = _activeMode.Interpret(in intent, _ctx);
+            }
+
+            if (_clampDragBounds && _ctx.HasDragBounds)
+            {
+                ApplyBoundsClamp();
             }
 
             if (intent.Type == BuildIntentType.Confirm)
             {
-                var full = _validatorPipeline.Validate(in ctx, ValidationMode.Full);
-                ctx = ctx.WithFullValidation(full);
-                ctx = ctx.WithDecision(_router.Decide(in ctx));
+                var full = _validatorPipeline.Validate(_ctx, ValidationMode.Full);
+                _ctx.FullValidation = full;
+                _ctx.Feedback = full.Feedback;
+                _ctx.Decision = _router.Decide(_ctx);
                 _hasDragStart = false;
             }
             else
             {
-                var quick = _validatorPipeline.Validate(in ctx, ValidationMode.Quick);
-                ctx = ctx.WithQuickValidation(quick);
+                var quick = _validatorPipeline.Validate(_ctx, ValidationMode.Quick);
+                _ctx.QuickValidation = quick;
+                _ctx.Feedback = quick.Feedback;
             }
 
-            return ctx;
+            return _ctx;
         }
 
-        private PipelineContext ApplyBoundsClamp(PipelineContext ctx)
+        private void ApplyBoundsClamp()
         {
-            if (!ctx.HasDragBounds) return ctx;
+            if (!_ctx.HasDragBounds || !_globalBounds.HasValue) return;
 
-            BoundsInt globalBounds = default;
-            bool found = false;
-
-            for (int i = 0; i < _validatorPipeline.InternalValidatorsCount; i++)
-            {
-                if (_validatorPipeline.TryGetBounds(i, out globalBounds))
-                {
-                    found = true;
-                    break;
-                }
-            }
-
-            if (!found) return ctx;
-
-            var b = ctx.DragBounds;
+            var globalBounds = _globalBounds.Value;
+            var b = _ctx.DragBounds;
 
             int minX = Mathf.Max(b.xMin, globalBounds.xMin);
             int minY = Mathf.Max(b.yMin, globalBounds.yMin);
@@ -121,8 +129,9 @@ namespace TMBS.Core.Pipeline
 
             if (maxX <= minX || maxY <= minY || maxZ <= minZ)
             {
-                var clampedToCursor = new BoundsInt(ctx.Cell, new Vector3Int(1, 1, 1));
-                return ctx.WithDragBounds(clampedToCursor);
+                var clampedToCursor = new BoundsInt(_ctx.Cell, new Vector3Int(1, 1, 1));
+                _ctx.DragBounds = clampedToCursor;
+                return;
             }
 
             var newBounds = new BoundsInt(
@@ -130,7 +139,7 @@ namespace TMBS.Core.Pipeline
                 new Vector3Int(maxX - minX, maxY - minY, maxZ - minZ)
             );
 
-            return ctx.WithDragBounds(newBounds);
+            _ctx.DragBounds = newBounds;
         }
 
         private static BoundsInt ComputeRectBounds(Vector3Int a, Vector3Int b)

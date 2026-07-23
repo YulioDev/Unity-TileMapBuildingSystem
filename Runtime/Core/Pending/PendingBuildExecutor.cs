@@ -33,7 +33,7 @@ namespace TMBS.Core.Pending
                 ? ctx.DragBounds
                 : new BoundsInt(ctx.Cell, Vector3Int.one);
 
-            var writeMask = ctx.Decision.WriteMask ?? TMBS.Core.Validation.CellMask.AllTrue(bounds);
+            var writeMask = ctx.Decision.WriteMask ?? TMBS.Core.Validation.CellMaskPool.Rent(bounds, true);
 
             if (!writeMask.AnyTrue())
                 return;

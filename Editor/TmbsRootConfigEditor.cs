@@ -65,29 +65,30 @@ public class TmbsRootConfigEditor : Editor
         {
             var menu = new GenericMenu();
 
-            AddValidatorOption<SelectionValidator>(menu, prop);
-            AddValidatorOption<OccupancyValidator>(menu, prop);
-            AddValidatorOption<BoundsValidator>(menu, prop);
+            var validatorTypes = TypeCache.GetTypesDerivedFrom<IValidator>();
+            foreach (var type in validatorTypes)
+            {
+                if (type.IsAbstract || type.IsInterface)
+                    continue;
+
+                menu.AddItem(new GUIContent(type.Name), false, (t) =>
+                {
+                    var targetType = (Type)t;
+                    serializedObject.Update();
+                    prop.arraySize++;
+                    var element = prop.GetArrayElementAtIndex(prop.arraySize - 1);
+
+                    element.FindPropertyRelative("enabled").boolValue = true;
+                    element.FindPropertyRelative("validator").managedReferenceValue = Activator.CreateInstance(targetType);
+
+                    serializedObject.ApplyModifiedProperties();
+                    EditorUtility.SetDirty(target);
+                    AssetDatabase.SaveAssets();
+                }, type);
+            }
 
             menu.ShowAsContext();
         };
-    }
-
-    private void AddValidatorOption<T>(GenericMenu menu, SerializedProperty listProp)
-        where T : IValidator, new()
-    {
-        menu.AddItem(new GUIContent(typeof(T).Name), false, () =>
-        {
-            listProp.arraySize++;
-            var element = listProp.GetArrayElementAtIndex(listProp.arraySize - 1);
-
-            element.FindPropertyRelative("enabled").boolValue = true;
-            element.FindPropertyRelative("validator").managedReferenceValue = new T();
-
-            serializedObject.ApplyModifiedProperties();
-            EditorUtility.SetDirty(target);
-            AssetDatabase.SaveAssets();
-        });
     }
 
     public override void OnInspectorGUI()
@@ -134,7 +135,7 @@ public class TmbsRootConfigEditor : Editor
         if (modeProp == null)
             return;
 
-        var mode = (TmbsInputMode)modeProp.enumValueIndex;
+        var mode = (TmbsInputMode)modeProp.intValue;
 
         switch (mode)
         {

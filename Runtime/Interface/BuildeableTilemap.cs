@@ -18,7 +18,7 @@ using TMBS.Unity.Tilemaps;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
-namespace TMBS.Runtime.Facade
+namespace TMBS.Runtime.Interface
 {
     public sealed class BuildeableTilemap : MonoBehaviour
     {
@@ -43,7 +43,7 @@ namespace TMBS.Runtime.Facade
         [Tooltip("If enabled, any IValidator component attached to this GameObject will be automatically included in the validation pipeline.")]
         [SerializeField] private bool includeAttachedSceneValidators = false;
 
-        private enum FacadeState
+        private enum InterfaceState
         {
             NotComposed,
             Composing,
@@ -51,7 +51,7 @@ namespace TMBS.Runtime.Facade
             Disabled
         }
 
-        private FacadeState _state = FacadeState.NotComposed;
+        private InterfaceState _state = InterfaceState.NotComposed;
 
         private IBuildInputAdapter _input;
         private IBuildPipeline _pipeline;
@@ -68,12 +68,18 @@ namespace TMBS.Runtime.Facade
         private PreviewPolicyEvaluator _previewEvaluator;
         private IBuildMode _activeMode;
 
+        private TMBS.Core.Pending.PendingDebugBuilder _pendingDebugBuilder;
+        private TMBS.Unity.Preview.PendingDebugTilemapRenderer _pendingDebugRenderer;
+
         private Vector3Int _lastPreviewCell;
         private BuildIntentType _lastPreviewIntent;
         private bool _lastPreviewAlternate;
         private bool _hasLastPreviewIntent;
 
         private IDisposable _selectionChangedSubscription;
+        private IDisposable _pendingCreatedSubscription;
+        private IDisposable _pendingChangedSubscription;
+        private IDisposable _pendingCompletedSubscription;
 
         private IBuildInputAdapter _externalInputAdapter;
         private IBuildInputAdapterProvider _externalInputProvider;
@@ -82,6 +88,8 @@ namespace TMBS.Runtime.Facade
 
         private void Update()
         {
+            TMBS.Core.Validation.CellMaskPool.ReclaimAll();
+
             if (_input is ITickableInputAdapter tickable)
             {
                 tickable.Tick(Time.deltaTime);
@@ -99,7 +107,7 @@ namespace TMBS.Runtime.Facade
 
             if (worldCamera == null)
             {
-                Debug.LogWarning("TMBS: Camera Mode is set to UseFacadeReference but worldCamera is missing. Using Camera.main instead.", this);
+                Debug.LogWarning("TMBS: Camera Mode is set to UseInterfaceReference but worldCamera is missing. Using Camera.main instead.", this);
                 return Camera.main;
             }
 
@@ -108,7 +116,7 @@ namespace TMBS.Runtime.Facade
 
         public bool SetExternalInputAdapter(IBuildInputAdapter adapter)
         {
-            if (_state == FacadeState.Composing || _state == FacadeState.Composed)
+            if (_state == InterfaceState.Composing || _state == InterfaceState.Composed)
             {
                 Debug.LogError("TMBS: SetExternalInputAdapter must be called before BuildeableTilemap is enabled.", this);
                 return false;
@@ -124,7 +132,7 @@ namespace TMBS.Runtime.Facade
 
         public bool SetExternalInputProvider(IBuildInputAdapterProvider provider)
         {
-            if (_state == FacadeState.Composing || _state == FacadeState.Composed)
+            if (_state == InterfaceState.Composing || _state == InterfaceState.Composed)
             {
                 Debug.LogError("TMBS: SetExternalInputProvider must be called before BuildeableTilemap is enabled.", this);
                 return false;
@@ -220,7 +228,6 @@ namespace TMBS.Runtime.Facade
         {
             System.Func<UnityEngine.Plane> planeProvider = () =>
             {
-                // Derive a construction plane from the target tilemap transform: plane normal points along -forward
                 var t = targetTilemap != null ? targetTilemap.transform : null;
                 if (t != null)
                 {
@@ -305,11 +312,11 @@ namespace TMBS.Runtime.Facade
 
         private void OnEnable()
         {
-            _state = FacadeState.Composing;
+            _state = InterfaceState.Composing;
 
             if (!TryValidateSerializedDependencies(out var resolvedInput))
             {
-                _state = FacadeState.Disabled;
+                _state = InterfaceState.Disabled;
                 enabled = false;
                 return;
             }
@@ -362,7 +369,7 @@ namespace TMBS.Runtime.Facade
                 _events.Publish(new BuildSelectionChangedEvent(instanceId, initial));
             }
 
-            _state = FacadeState.Composed;
+            _state = InterfaceState.Composed;
         }
 
         private void OnDisable()
@@ -386,6 +393,17 @@ namespace TMBS.Runtime.Facade
             _selectionChangedSubscription?.Dispose();
             _selectionChangedSubscription = null;
 
+            _pendingCreatedSubscription?.Dispose();
+            _pendingChangedSubscription?.Dispose();
+            _pendingCompletedSubscription?.Dispose();
+            _pendingCreatedSubscription = null;
+            _pendingChangedSubscription = null;
+            _pendingCompletedSubscription = null;
+
+            _pendingDebugRenderer?.Clear();
+            _pendingDebugRenderer = null;
+            _pendingDebugBuilder = null;
+
             if (rootConfig != null &&
                 rootConfig.history != null &&
                 rootConfig.history.clearOnDisable)
@@ -395,7 +413,7 @@ namespace TMBS.Runtime.Facade
 
             ReleaseExternalInputIfNeeded();
 
-            _state = FacadeState.Disabled;
+            _state = InterfaceState.Disabled;
         }
 
         private void OnBuildSelectionChanged(BuildSelectionChangedEvent evt)
@@ -503,49 +521,6 @@ namespace TMBS.Runtime.Facade
                 }
 
                 if (!ctx.QuickValidation.IsValid)
-                {
-                    var bounds = ctx.HasDragBounds ? ctx.DragBounds : new BoundsInt(ctx.Cell, Vector3Int.one);
-                    _events.Publish(new ValidationFailedEvent(instanceId, ctx.QuickValidation.Failure, ctx.Cell, bounds, ctx.Feedback.BlockedMask));
-                }
-                return;
-            }
-
-            if (!ctx.FullValidation.IsValid)
-            {
-                var bounds = ctx.HasDragBounds ? ctx.DragBounds : new BoundsInt(ctx.Cell, Vector3Int.one);
-                _events.Publish(new ValidationFailedEvent(instanceId, ctx.FullValidation.Failure, ctx.Cell, bounds, ctx.FullValidation.Feedback.BlockedMask));
-                return;
-            }
-
-            if (ctx.Decision.Type != Core.Execution.ExecutionDecisionType.Reject)
-            {
-                _executor.Execute(in ctx, targetTilemap);
-                _preview.Hide();
-            }
-        }
-
-        private static bool RequiresInputFocus(BuildIntentType type)
-        {
-            return type == BuildIntentType.DragStart
-                   || type == BuildIntentType.DragUpdate
-                   || type == BuildIntentType.DragEnd
-                   || type == BuildIntentType.Confirm;
-        }
-    }
-}getTilemap);
-                _preview.Hide();
-            }
-        }
-
-        private static bool RequiresInputFocus(BuildIntentType type)
-        {
-            return type == BuildIntentType.DragStart
-                   || type == BuildIntentType.DragUpdate
-                   || type == BuildIntentType.DragEnd
-                   || type == BuildIntentType.Confirm;
-        }
-    }
-}tion.IsValid)
                 {
                     var bounds = ctx.HasDragBounds ? ctx.DragBounds : new BoundsInt(ctx.Cell, Vector3Int.one);
                     _events.Publish(new ValidationFailedEvent(instanceId, ctx.QuickValidation.Failure, ctx.Cell, bounds, ctx.Feedback.BlockedMask));

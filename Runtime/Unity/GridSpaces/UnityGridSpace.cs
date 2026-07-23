@@ -6,13 +6,16 @@ namespace TMBS.Unity.GridSpaces
 {
     public sealed class UnityGridSpace : IGridSpace
     {
+        // Main tilemap reference.
         private readonly Tilemap _tilemap;
 
         public UnityGridSpace(Tilemap tilemap)
         {
             if (tilemap == null)
-                throw new System.ArgumentNullException(nameof(tilemap));
-
+            {
+                UnityEngine.Debug.LogError("UnityGridSpace: Tilemap cannot be a null reference in the constructor.");
+                return;
+            }
             _tilemap = tilemap;
         }
 

@@ -18,7 +18,7 @@ namespace TMBS.Runtime.Config
         public TmbsInputConfig input = new TmbsInputConfig();
 
         [Header("Camera")]
-        [Tooltip("AlwaysMainCamera: uses Camera.main for every input calculation.\nUseFacadeReference: uses the specific camera assigned in the BuildeableTilemap component.")]
+        [Tooltip("AlwaysMainCamera: uses Camera.main for every input calculation.\nUseInterfaceReference: uses the specific camera assigned in the BuildeableTilemap component.")]
         public TmbsCameraMode cameraMode = TmbsCameraMode.AlwaysMainCamera;
 
         [Header("Preview")]
@@ -53,6 +53,10 @@ namespace TMBS.Runtime.Config
         [Header("Pending Construction")]
         [Tooltip("Configuration for deferred/pending build mode. Only active when ExecutionMode is Pending.")]
         public TmbsPendingConstructionConfig pendingConstruction = new TmbsPendingConstructionConfig();
+
+        [Header("Pending Debug")]
+        [Tooltip("Debug-only options for slowly completing pending constructions without external agents.")]
+        public TmbsPendingDebugConfig pendingDebug = new TmbsPendingDebugConfig();
 
         [Header("Validation")]
         [Tooltip("List of global validators that all build operations must pass.")]
@@ -103,8 +107,6 @@ namespace TMBS.Runtime.Config
 
             if (history == null)
                 history = new TmbsHistoryConfig();
-            // Migrate legacy historyCapacity if present. This ensures old assets are migrated in the editor
-            // but prevents runtime getters from mutating assets.
             if (historyCapacity > 0)
             {
                 if (history.capacity <= 0)
@@ -115,9 +117,6 @@ namespace TMBS.Runtime.Config
 
             history.capacity = Mathf.Max(0, history.capacity);
             metadataInitialCapacity = Mathf.Max(0, metadataInitialCapacity);
-        }
-    }
-}lCapacity = Mathf.Max(0, metadataInitialCapacity);
         }
     }
 }

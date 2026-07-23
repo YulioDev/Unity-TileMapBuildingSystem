@@ -9,6 +9,8 @@ namespace TMBS.Unity.Tilemaps
 
         public UnityTilemapProvider(Tilemap visual, Tilemap preview)
         {
+            if (visual == null) throw new System.ArgumentNullException(nameof(visual));
+            if (preview == null) throw new System.ArgumentNullException(nameof(preview));
             _visual = visual;
             _preview = preview;
         }
