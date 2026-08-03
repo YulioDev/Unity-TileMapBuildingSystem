@@ -24,14 +24,18 @@ namespace TMBS.Runtime.Config
         [Header("Preview")]
         [Tooltip("Determines when the build preview is visible (Always, Never, or ModeBased).")]
         public PreviewPolicy previewPolicy = PreviewPolicy.AlwaysOn;
+
+        [Tooltip("Colors used for the preview overlay. The build tile is tinted with these colors to indicate validity.")]
+        public TmbsPreviewOverlayConfig previewOverlay = new TmbsPreviewOverlayConfig();
         
-        [Tooltip("The default tile asset used for building if no selection is provided.")]
+        [HideInInspector]
+        [Tooltip("Legacy: tile selection has moved to BuildeableTilemap. Kept for backward compatibility.")]
         public TileBase buildTile;
-        
-        [Tooltip("Tile shown in the preview when the placement is valid.")]
+
+        [HideInInspector]
         public TileBase previewValidTile;
-        
-        [Tooltip("Tile shown in the preview when the placement is blocked or invalid.")]
+
+        [HideInInspector]
         public TileBase previewInvalidTile;
 
         [Header("History")]

@@ -17,6 +17,9 @@ using TMBS.Unity.Preview;
 using TMBS.Unity.Tilemaps;
 using UnityEngine;
 using UnityEngine.Tilemaps;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 namespace TMBS.Runtime.Interface
 {
@@ -36,12 +39,46 @@ namespace TMBS.Runtime.Interface
         [Tooltip("A temporary tilemap used to render build previews and validation feedback.")]
         [SerializeField] private Tilemap previewTilemap;
 
+        [Tooltip("Optional tilemap used to render visual feedback for pending constructions. Only needed when ExecutionMode is Pending.")]
+        [SerializeField] private Tilemap pendingTilemap;
+
         [Tooltip("The world camera used to process pointer input. Overrides Camera.main if the root config policy allows it.")]
         [SerializeField] private Camera worldCamera;
 
         [Header("Discovery")]
         [Tooltip("If enabled, any IValidator component attached to this GameObject will be automatically included in the validation pipeline.")]
         [SerializeField] private bool includeAttachedSceneValidators = false;
+
+        [Header("Build Selection")]
+        [Tooltip("Defines what to build. Assign a SingleTileBuildable for single tiles, or a blueprint descriptor.")]
+        [SerializeReference]
+        private BuildableDescriptor currentBuildable = new SingleTileBuildable();
+
+        /// <summary>
+        /// The currently active buildable descriptor. Read-only.
+        /// </summary>
+        public BuildableDescriptor CurrentBuildable => currentBuildable;
+
+        /// <summary>
+        /// Changes the active buildable at runtime. Publishes a selection
+        /// changed event so the pipeline and preview update immediately.
+        /// Call this from your UI tile-selection code.
+        /// </summary>
+        public void SetBuildable(BuildableDescriptor descriptor)
+        {
+            if (descriptor == null) return;
+            currentBuildable = descriptor;
+            PublishSelectionChanged();
+        }
+
+        /// <summary>
+        /// Convenience method for the common single-tile case.
+        /// Equivalent to SetBuildable(new SingleTileBuildable(tile)).
+        /// </summary>
+        public void SetBuildTile(TileBase tile)
+        {
+            SetBuildable(new SingleTileBuildable(tile));
+        }
 
         private enum InterfaceState
         {
@@ -201,13 +238,21 @@ namespace TMBS.Runtime.Interface
 
             switch (inputConfig.mode)
             {
-                case TmbsInputMode.ExternalProvided:
-                    resolvedInput = ResolveExternalInputAdapter();
-                    break;
-
-                case TmbsInputMode.Mouse:
+                case TmbsInputMode.Legacy:
                     resolvedInput = CreateLegacyMouseInputAdapter();
                     _inputCreatedInternally = true;
+                    break;
+
+                case TmbsInputMode.InputActions:
+#if ENABLE_INPUT_SYSTEM
+                    resolvedInput = CreateInputActionsAdapter();
+                    _inputCreatedInternally = true;
+#else
+                    Debug.LogError(
+                        "TMBS: InputActions mode requires the Input System package " +
+                        "(com.unity.inputsystem). Install it via Package Manager.", this);
+                    return false;
+#endif
                     break;
 
                 default:
@@ -239,6 +284,30 @@ namespace TMBS.Runtime.Interface
 
             return new TMBS.Unity.Input.LegacyMouseBuildInputAdapter(ResolveCamera, planeProvider);
         }
+
+#if ENABLE_INPUT_SYSTEM
+        private IBuildInputAdapter CreateInputActionsAdapter()
+        {
+            System.Func<UnityEngine.Plane> planeProvider = () =>
+            {
+                var t = targetTilemap != null ? targetTilemap.transform : null;
+                if (t != null)
+                    return new UnityEngine.Plane(t.forward, t.position);
+                return new UnityEngine.Plane(Vector3.back, Vector3.zero);
+            };
+
+            var cfg = rootConfig.input;
+            return new TMBS.Unity.Input.InputActionsBuildInputAdapter(
+                ResolveCamera,
+                planeProvider,
+                cfg.pointAction,
+                cfg.dragAction,
+                cfg.cancelAction,
+                cfg.undoAction,
+                cfg.redoAction,
+                cfg.alternateModifierAction);
+        }
+#endif
 
         private IBuildInputAdapter ResolveExternalInputAdapter()
         {
@@ -358,18 +427,113 @@ namespace TMBS.Runtime.Interface
                 Debug.LogError("TMBS: Input Adapter is unassigned or invalid.", this);
             }
 
-            if (rootConfig != null && rootConfig.buildTile != null && _events != null)
-            {
-                var initial = new BuildSelectionData(
-                    rootConfig.buildTile,
-                    rootConfig.previewValidTile,
-                    rootConfig.previewInvalidTile
-                );
-
-                _events.Publish(new BuildSelectionChangedEvent(instanceId, initial));
-            }
+            PublishSelectionChanged();
 
             _state = InterfaceState.Composed;
+
+            SetupPendingVisual();
+        }
+
+        private void PublishSelectionChanged()
+        {
+            if (_events == null) return;
+
+            BuildableDescriptor resolved = currentBuildable;
+
+            if (resolved == null || resolved.ResolvePrimaryTile() == null)
+            {
+                // Fallback for backward compatibility with rootConfig tile fields
+                if (rootConfig != null && rootConfig.buildTile != null)
+                {
+                    resolved = new SingleTileBuildable(rootConfig.buildTile);
+                }
+            }
+
+            if (resolved == null || resolved.ResolvePrimaryTile() == null)
+                return;
+
+            var data = new BuildSelectionData(resolved.ResolvePrimaryTile());
+            _events.Publish(new BuildSelectionChangedEvent(instanceId, data));
+        }
+
+        private void SetupPendingVisual()
+        {
+            if (rootConfig == null || rootConfig.executionMode != ExecutionMode.Pending)
+                return;
+
+            var debugConfig = rootConfig.GetRuntimePendingDebugConfig();
+            if (!debugConfig.renderDebugTiles || debugConfig.tileArchetype == null)
+                return;
+
+            if (pendingTilemap == null)
+            {
+                Debug.LogWarning("TMBS: Pending visual is enabled (renderDebugTiles) but pendingTilemap is not assigned on BuildeableTilemap.", this);
+                return;
+            }
+
+            _pendingDebugRenderer = new TMBS.Unity.Preview.PendingDebugTilemapRenderer(
+                pendingTilemap,
+                debugConfig.tileArchetype,
+                debugConfig.tileArchetype.useOriginalTileAsFallback);
+
+            if (_events != null)
+            {
+                _pendingCreatedSubscription = _events.Subscribe<PendingConstructionCreatedEvent>(OnPendingCreated);
+                _pendingChangedSubscription = _events.Subscribe<PendingConstructionChangedEvent>(OnPendingChanged);
+                _pendingCompletedSubscription = _events.Subscribe<PendingConstructionCompletedEvent>(OnPendingCompleted);
+            }
+        }
+
+        private void OnPendingCreated(PendingConstructionCreatedEvent evt)
+        {
+            if (evt.InstanceId != instanceId) return;
+            if (_pendingDebugRenderer == null || _pendingWorkApi == null) return;
+
+            var all = _pendingWorkApi.GetAll();
+            if (all == null) return;
+
+            foreach (var pending in all)
+            {
+                if (pending.Id != evt.PendingId) continue;
+                foreach (var cell in pending.Cells)
+                {
+                    _pendingDebugRenderer.RenderCell(cell, pending.State);
+                }
+                break;
+            }
+        }
+
+        private void OnPendingChanged(PendingConstructionChangedEvent evt)
+        {
+            if (evt.InstanceId != instanceId) return;
+            if (_pendingDebugRenderer == null || _pendingWorkApi == null) return;
+
+            var all = _pendingWorkApi.GetAll();
+            if (all == null) return;
+
+            foreach (var pending in all)
+            {
+                if (pending.Id != evt.PendingId) continue;
+                foreach (var cell in pending.Cells)
+                {
+                    if (cell.IsWorkComplete)
+                        _pendingDebugRenderer.ClearCell(cell.Cell);
+                    else
+                        _pendingDebugRenderer.RenderCell(cell, pending.State);
+                }
+                break;
+            }
+        }
+
+        private void OnPendingCompleted(PendingConstructionCompletedEvent evt)
+        {
+            if (evt.InstanceId != instanceId) return;
+            if (_pendingDebugRenderer == null) return;
+
+            foreach (var pos in evt.Bounds.allPositionsWithin)
+            {
+                _pendingDebugRenderer.ClearCell(pos);
+            }
         }
 
         private void OnDisable()
@@ -422,10 +586,7 @@ namespace TMBS.Runtime.Interface
 
             _tileSelectionState.UpdateFromSelection(evt.Selection);
 
-            _preview.UpdateTiles(
-                evt.Selection.ResolvedPreviewValid,
-                evt.Selection.ResolvedPreviewInvalid
-            );
+            _preview.UpdateTile(evt.Selection.BuildTile);
         }
 
         private void OnBuildIntent(BuildIntent intent)

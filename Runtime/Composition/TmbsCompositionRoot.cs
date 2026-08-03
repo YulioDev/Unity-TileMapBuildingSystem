@@ -160,7 +160,8 @@ namespace TMBS.Runtime.Interface
                 config.GetRuntimeClampDragBoundsToBoundsValidator(), 
                 globalBounds);
 
-            var preview = new TilemapPreviewRenderer(previewTilemap, config.previewValidTile, config.previewInvalidTile);
+            var overlay = config.previewOverlay ?? new TmbsPreviewOverlayConfig();
+            var preview = new TilemapPreviewRenderer(previewTilemap, overlay.validColor, overlay.invalidColor);
 
             return new TmbsRuntimeContext(
                 input,

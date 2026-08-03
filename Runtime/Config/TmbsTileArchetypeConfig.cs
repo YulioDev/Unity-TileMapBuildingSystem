@@ -24,6 +24,10 @@ namespace TMBS.Runtime.Config
         public Color inProgressColor = new Color(0.25f, 0.6f, 1f, 0.65f);
         public Color invalidColor = new Color(1f, 0.1f, 0.1f, 0.55f);
 
+        [Header("Fallback")]
+        [Tooltip("If true and no archetype tile is configured for a state, the original tile from the pending order is used instead.")]
+        public bool useOriginalTileAsFallback = true;
+
         public TileBase ResolvePendingTile() => pendingTile != null ? pendingTile : baseTile;
         public TileBase ResolveWaitingResourcesTile() => waitingResourcesTile != null ? waitingResourcesTile : baseTile;
         public TileBase ResolveReadyTile() => readyTile != null ? readyTile : baseTile;

@@ -10,6 +10,6 @@ namespace TMBS.Unity.Preview
         void ShowRect(BoundsInt bounds, bool valid);
         void ShowRectMasked(BoundsInt fullArea, CellMask blockedMask);
         void Hide();
-        void UpdateTiles(TileBase valid, TileBase invalid);
+        void UpdateTile(TileBase tile);
     }
 }
