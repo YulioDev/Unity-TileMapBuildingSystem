@@ -26,17 +26,7 @@ namespace TMBS.Runtime.Config
         public PreviewPolicy previewPolicy = PreviewPolicy.AlwaysOn;
 
         [Tooltip("Colors used for the preview overlay. The build tile is tinted with these colors to indicate validity.")]
-        public TmbsPreviewOverlayConfig previewOverlay = new TmbsPreviewOverlayConfig();
-        
-        [HideInInspector]
-        [Tooltip("Legacy: tile selection has moved to BuildeableTilemap. Kept for backward compatibility.")]
-        public TileBase buildTile;
-
-        [HideInInspector]
-        public TileBase previewValidTile;
-
-        [HideInInspector]
-        public TileBase previewInvalidTile;
+        public TmbsPreviewConfig previewOverlay = new TmbsPreviewConfig();
 
         [Header("History")]
         [Tooltip("Configures Undo/Redo capabilities and history retention.")]
@@ -48,35 +38,53 @@ namespace TMBS.Runtime.Config
         [Header("Metadata")]
         [Tooltip("Maximum number of build records the system can store in memory.")]
         [Min(0)]
-        public int metadataInitialCapacity = 4096;
+        public int recordCapacity = 4096;
 
         [Header("Bounds")]
         [Tooltip("If enabled, builds will be clamped to the boundaries defined by Bounds Validators.")]
-        public bool clampDragBoundsToBoundsValidator = false;
+        public bool clampToBounds = false;
 
         [Header("Pending Construction")]
         [Tooltip("Configuration for deferred/pending build mode. Only active when ExecutionMode is Pending.")]
-        public TmbsPendingConstructionConfig pendingConstruction = new TmbsPendingConstructionConfig();
+        public TmbsPendingConfig pending = new TmbsPendingConfig();
 
         [Header("Pending Debug")]
         [Tooltip("Debug-only options for slowly completing pending constructions without external agents.")]
         public TmbsPendingDebugConfig pendingDebug = new TmbsPendingDebugConfig();
 
+        [Header("Debug Menu")]
+        [Tooltip("Configuration for the in-game debug overlay menu.")]
+        public TmbsDebugMenuConfig debugMenu = new TmbsDebugMenuConfig();
+
+        [Header("Default Buildable (Optional)")]
+        [Tooltip("Optional initial buildable data asset.")]
+        public TmbsBuildableData defaultBuildable;
+
         [Header("Validation")]
         [Tooltip("List of global validators that all build operations must pass.")]
         public List<ValidatorEntry> validators = new List<ValidatorEntry>();
 
-        public TmbsPendingConstructionConfig GetRuntimePendingConfig()
+        public TmbsDebugMenuConfig GetDebugMenuConfig()
         {
-            return pendingConstruction ?? new TmbsPendingConstructionConfig();
+            return debugMenu ?? new TmbsDebugMenuConfig();
         }
 
-        public TmbsPendingDebugConfig GetRuntimePendingDebugConfig()
+        public bool IsDebugMenuEnabled()
+        {
+            return debugMenu != null && debugMenu.enabled;
+        }
+
+        public TmbsPendingConfig GetPendingConfig()
+        {
+            return pending ?? new TmbsPendingConfig();
+        }
+
+        public TmbsPendingDebugConfig GetPendingDebugConfig()
         {
             return pendingDebug ?? new TmbsPendingDebugConfig();
         }
 
-        public TmbsHistoryConfig GetRuntimeHistoryConfig()
+        public TmbsHistoryConfig GetHistoryConfig()
         {
             var source = history ?? new TmbsHistoryConfig();
 
@@ -85,21 +93,21 @@ namespace TMBS.Runtime.Config
                 enableUndoRedo = source.enableUndoRedo,
                 capacity = Mathf.Max(0, source.capacity),
                 clearOnDisable = source.clearOnDisable,
-                emitRegionModifiedEvents = source.emitRegionModifiedEvents
+                emitRegionEvents = source.emitRegionEvents
             };
         }
 
-        public int GetRuntimeMetadataInitialCapacity()
+        public int GetRecordCapacity()
         {
-            return Mathf.Max(0, metadataInitialCapacity);
+            return Mathf.Max(0, recordCapacity);
         }
 
-        public bool GetRuntimeClampDragBoundsToBoundsValidator()
+        public bool ShouldClampToBounds()
         {
-            return clampDragBoundsToBoundsValidator;
+            return clampToBounds;
         }
 
-        public TmbsCameraMode GetRuntimeCameraMode()
+        public TmbsCameraMode GetCameraMode()
         {
             return cameraMode;
         }
@@ -108,6 +116,9 @@ namespace TMBS.Runtime.Config
         {
             if (input == null)
                 input = new TmbsInputConfig();
+
+            if (debugMenu == null)
+                debugMenu = new TmbsDebugMenuConfig();
 
             if (history == null)
                 history = new TmbsHistoryConfig();
@@ -120,7 +131,7 @@ namespace TMBS.Runtime.Config
             }
 
             history.capacity = Mathf.Max(0, history.capacity);
-            metadataInitialCapacity = Mathf.Max(0, metadataInitialCapacity);
+            recordCapacity = Mathf.Max(0, recordCapacity);
         }
     }
 }

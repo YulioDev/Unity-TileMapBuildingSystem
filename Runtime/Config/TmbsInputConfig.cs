@@ -15,11 +15,6 @@ namespace TMBS.Runtime.Config
             "InputActions: Uses Unity's Input System package with configurable InputActionReferences.")]
         public TmbsInputMode mode = TmbsInputMode.Legacy;
 
-        // ── Legacy ──
-
-        [Tooltip("Which legacy device adapter to use. Currently only Mouse is supported.")]
-        public LegacyInputSubMode legacySubMode = LegacyInputSubMode.Mouse;
-
         // ── Input Actions ──
 
 #if ENABLE_INPUT_SYSTEM

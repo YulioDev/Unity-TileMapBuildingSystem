@@ -9,18 +9,15 @@ namespace TMBS.Core.Validation
     {
         public BoundsInt allowedBounds = new BoundsInt(-50, -50, 0, 100, 100, 1);
         
-        
-        
         public bool allowPartialPlacement = false;
-        
         
         public bool markBlockedArea = true;
 
-        public bool validateAlternateBehaviour = true;
+        public bool checkOnErase = true;
 
         public ValidationResult Validate(in PipelineContext ctx, ValidationMode mode)
         {
-            if (ctx.AlternateBehaviour && !validateAlternateBehaviour)
+            if (ctx.AlternateBehaviour && !checkOnErase)
                 return ValidationResult.Valid;
 
             var opBounds = ValidationUtil.GetOperationBounds(in ctx);
@@ -41,7 +38,6 @@ namespace TMBS.Core.Validation
 
             for (int i = 0; i < len; i++)
             {
-                
                 var cell = write.CellAt(i);
                 bool inside = allowedBounds.Contains(cell);
 
@@ -62,13 +58,9 @@ namespace TMBS.Core.Validation
 
             var fb = markBlockedArea ? new ValidationFeedback(blocked) : default;
 
-            
-            
             if (allowPartialPlacement && anyIn)
                 return ValidationResult.ValidWith(fb, write);
 
-            
-            
             return ValidationResult.InvalidWith(ValidationFailure.OutOfBounds, fb, write);
         }
     }

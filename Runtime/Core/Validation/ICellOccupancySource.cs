@@ -7,7 +7,7 @@ namespace TMBS.Core.Validation
         bool HasTile(Vector3Int cell);
     }
 
-    public interface IOccupancySourceInjectable
+    public interface IOccupancyConsumer
     {
         void InjectOccupancySource(ICellOccupancySource occupancySource);
     }

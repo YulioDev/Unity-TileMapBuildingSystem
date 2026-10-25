@@ -15,18 +15,18 @@ namespace TMBS.Core.Execution
         private readonly IMetadataStore _metadata;
         private readonly IUndoRedoHistory _history;
         private readonly IEventBus _events;
-        private readonly bool _emitRegionModifiedEvents;
+        private readonly bool _emitRegionEvents;
 
         public ImmediateBuildExecutor(
             IMetadataStore metadata,
             IUndoRedoHistory history,
             IEventBus events,
-            bool emitRegionModifiedEvents)
+            bool emitRegionEvents)
         {
             _metadata = metadata;
             _history = history;
             _events = events;
-            _emitRegionModifiedEvents = emitRegionModifiedEvents;
+            _emitRegionEvents = emitRegionEvents;
         }
 
         public void Execute(in PipelineContext ctx, Tilemap targetTilemap)
@@ -89,7 +89,8 @@ namespace TMBS.Core.Execution
                                 afterMeta = new BuildRecord(
                                     afterTile,
                                     cell,
-                                    BuildState.Completed);
+                                    BuildState.Completed,
+                                    ctx.BuildableData);
                             }
 
                             changes[changeIndex++] = new TileChange(cell, beforeTile, afterTile, beforeMeta, afterMeta);
@@ -105,7 +106,7 @@ namespace TMBS.Core.Execution
                 changes,
                 _metadata,
                 bounds,
-                _emitRegionModifiedEvents ? (b) => NotifyRegionModified(instanceId, b) : (Action<BoundsInt>)null);
+                _emitRegionEvents ? (b) => NotifyRegionModified(instanceId, b) : (Action<BoundsInt>)null);
 
             if (_history != null)
             {

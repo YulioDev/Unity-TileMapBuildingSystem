@@ -12,10 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e322a0564eaff6b4d90f643a97ba866f, type: 3}
   m_Name: root
   m_EditorClassIdentifier: Assembly-CSharp::TMBS.Runtime.Config.TmbsRootConfig
-  executionMode: 0
+  executionMode: 1
   input:
     mode: 1
-    legacySubMode: 0
     pointAction: {fileID: 0}
     dragAction: {fileID: 0}
     cancelAction: {fileID: 0}
@@ -32,29 +31,29 @@ MonoBehaviour:
     allowRedoInput: 1
   cameraMode: 0
   previewPolicy: 2
-  buildTile: {fileID: 11400000, guid: 180f55a6f11b7d54e828326e9f02054a, type: 2}
-  previewValidTile: {fileID: 11400000, guid: 2e015b42f4c8fdd4ba88a7f8d2ab743b, type: 2}
-  previewInvalidTile: {fileID: 11400000, guid: 50202cb830faae04ba588237a9a8923b, type: 2}
+  previewOverlay:
+    validColor: {r: 0.25, g: 1, b: 0.25, a: 0.5}
+    invalidColor: {r: 1, g: 0.2, b: 0.2, a: 0.5}
   history:
     enableUndoRedo: 1
     capacity: 256
     clearOnDisable: 0
-    emitRegionModifiedEvents: 1
+    emitRegionEvents: 1
   historyCapacity: -1
-  metadataInitialCapacity: 4096
-  clampDragBoundsToBoundsValidator: 0
-  pendingConstruction:
+  recordCapacity: 4096
+  clampToBounds: 0
+  pending:
     groupingMode: 0
     costMode: 0
-    resourcePolicy: 2
-    fixedWorkPerCell: 1
-    fixedResourceCostPerCell: 1
+    resourcePolicy: 0
+    workCost: 1
+    resourceCost: 1
     replaceExistingPending: 0
     allowPartialCompletion: 1
-    createPendingForAlternateBehaviour: 0
+    pendingOnErase: 0
     emitPendingEvents: 1
   pendingDebug:
-    enabled: 0
+    enabled: 1
     workPerStep: 256
     cellsPerStep: 1
     autoDeliverResources: 1
@@ -72,7 +71,15 @@ MonoBehaviour:
       readyColor: {r: 0.25, g: 1, b: 0.25, a: 0.5}
       inProgressColor: {r: 0.25, g: 0.6, b: 1, a: 0.65}
       invalidColor: {r: 1, g: 0.1, b: 0.1, a: 0.55}
-      useOriginalTileAsFallback: 1
+      fallbackToOriginal: 1
+  debugMenu:
+    enabled: 1
+    requireControl: 1
+    toggleKey: 47
+    defaultWorkIncrement: 1
+    defaultResourceIncrement: 1
+    autoTickInterval: 0.2
+  defaultBuildable: {fileID: 11400000, guid: a1b2c3d4e5f600010000000000000004, type: 2}
   validators:
   - enabled: 1
     validator:
@@ -92,8 +99,8 @@ MonoBehaviour:
         allowOverwrite: 1
         skipOccupiedCells: 1
         markBlockedArea: 1
-        validateAlternateBehaviour: 1
-        occupancySourceMode: 1
+        checkOnErase: 0
+        sourceMode: 0
     - rid: 7190439193056116805
       type: {class: SelectionValidator, ns: TMBS.Core.Validation, asm: Assembly-CSharp}
       data:
@@ -106,4 +113,4 @@ MonoBehaviour:
           m_Size: {x: 15, y: 15, z: 1}
         allowPartialPlacement: 1
         markBlockedArea: 1
-        validateAlternateBehaviour: 1
+        checkOnErase: 1

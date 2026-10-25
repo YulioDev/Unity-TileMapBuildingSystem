@@ -10,23 +10,23 @@ namespace TMBS.Core.Pending
 {
     public sealed class PendingBuildExecutor : IBuildExecutor
     {
-        private readonly IPendingConstructionStore _store;
+        private readonly IPendingStore _store;
         private readonly IEventBus _events;
-        private readonly TmbsPendingConstructionConfig _config;
+        private readonly TmbsPendingConfig _config;
 
         public PendingBuildExecutor(
-            IPendingConstructionStore store,
+            IPendingStore store,
             IEventBus events,
-            TmbsPendingConstructionConfig config)
+            TmbsPendingConfig config)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _events = events;
-            _config = config ?? new TmbsPendingConstructionConfig();
+            _config = config ?? new TmbsPendingConfig();
         }
 
         public void Execute(in PipelineContext ctx, Tilemap targetTilemap)
         {
-            if (ctx.AlternateBehaviour && !_config.createPendingForAlternateBehaviour)
+            if (ctx.AlternateBehaviour && !_config.pendingOnErase)
                 return;
 
             var bounds = ctx.HasDragBounds
@@ -59,17 +59,18 @@ namespace TMBS.Core.Pending
                     _store.Remove(existing.Id);
                 }
 
-                var cellData = new PendingConstructionCell(
+                var cellData = new PendingCell(
                     cell,
                     ctx.Decision.WriteTile,
-                    _config.fixedWorkPerCell,
+                    ctx.BuildableData,
+                    ResolveWorkCost(ctx),
                     0,
-                    _config.fixedResourceCostPerCell,
+                    ResolveResourceCost(ctx),
                     0);
 
                 var cellBounds = new BoundsInt(cell, Vector3Int.one);
 
-                var pending = new PendingConstruction(
+                var pending = new PendingOrder(
                     ctx.InstanceId,
                     cellBounds,
                     new[] { cellData },
@@ -78,7 +79,7 @@ namespace TMBS.Core.Pending
                 int id = _store.Add(pending);
 
                 if (_config.emitPendingEvents)
-                    _events?.Publish(new PendingConstructionCreatedEvent(ctx.InstanceId, id, cellBounds));
+                    _events?.Publish(new PendingCreatedEvent(ctx.InstanceId, id, cellBounds));
             }
         }
 
@@ -105,7 +106,7 @@ namespace TMBS.Core.Pending
                 }
             }
 
-            var cells = new PendingConstructionCell[count];
+            var cells = new PendingCell[count];
             int w = 0;
 
             for (int i = 0; i < writeMask.Length; i++)
@@ -113,16 +114,17 @@ namespace TMBS.Core.Pending
                 if (!writeMask.Bits[i]) continue;
                 var cell = writeMask.CellAt(i);
 
-                cells[w++] = new PendingConstructionCell(
+                cells[w++] = new PendingCell(
                     cell,
                     ctx.Decision.WriteTile,
-                    _config.fixedWorkPerCell,
+                    ctx.BuildableData,
+                    ResolveWorkCost(ctx),
                     0,
-                    _config.fixedResourceCostPerCell,
+                    ResolveResourceCost(ctx),
                     0);
             }
 
-            var pending = new PendingConstruction(
+            var pending = new PendingOrder(
                 ctx.InstanceId,
                 bounds,
                 cells,
@@ -131,12 +133,34 @@ namespace TMBS.Core.Pending
             int id = _store.Add(pending);
 
             if (_config.emitPendingEvents)
-                _events?.Publish(new PendingConstructionCreatedEvent(ctx.InstanceId, id, bounds));
+                _events?.Publish(new PendingCreatedEvent(ctx.InstanceId, id, bounds));
         }
 
-        private PendingConstructionState ResolveInitialState() =>
-            _config.resourcePolicy == PendingResourcePolicy.RequiredBeforeWork
-                ? PendingConstructionState.WaitingForResources
-                : PendingConstructionState.ReadyToBuild;
+        private int ResolveWorkCost(in PipelineContext ctx)
+        {
+            if (ctx.BuildableData != null)
+                return ctx.BuildableData.workCost;
+            return _config.workCost;
+        }
+
+        private int ResolveResourceCost(in PipelineContext ctx)
+        {
+            if (ctx.BuildableData != null)
+                return ctx.BuildableData.resourceCost;
+            return _config.resourceCost;
+        }
+
+        private PendingState ResolveInitialState()
+        {
+            switch (_config.resourcePolicy)
+            {
+                case ResourceRequirement.RequiredBeforeWork:
+                case ResourceRequirement.AllowPartialDelivery:
+                    return PendingState.WaitingForResources;
+                case ResourceRequirement.None:
+                default:
+                    return PendingState.ReadyToBuild;
+            }
+        }
     }
 }

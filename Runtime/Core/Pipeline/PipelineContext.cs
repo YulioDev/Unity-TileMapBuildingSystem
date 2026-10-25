@@ -1,5 +1,6 @@
 using TMBS.Core.Execution;
 using TMBS.Core.Validation;
+using TMBS.Runtime.Config;
 using UnityEngine;
 
 namespace TMBS.Core.Pipeline
@@ -12,6 +13,7 @@ namespace TMBS.Core.Pipeline
         public bool HasCell { get; set; }
         public bool AlternateBehaviour { get; set; }
         public UnityEngine.Tilemaps.TileBase SelectedTile { get; set; }
+        public TmbsBuildableData BuildableData { get; set; }
         public bool HasSelection => SelectedTile != null;
         public ValidationResult QuickValidation { get; set; }
         public ValidationResult FullValidation { get; set; }
@@ -42,6 +44,7 @@ namespace TMBS.Core.Pipeline
             HasCell = hasCell;
             AlternateBehaviour = alternateBehaviour;
             SelectedTile = selectedTile;
+            BuildableData = null;
             QuickValidation = quickValidation;
             FullValidation = fullValidation;
             Decision = decision;
@@ -51,4 +54,3 @@ namespace TMBS.Core.Pipeline
         }
     }
 }
-

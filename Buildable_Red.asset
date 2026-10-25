@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ac54f485ac2c4bd429a68850fd675f64, type: 3}
+  m_Name: Buildable_Red
+  m_EditorClassIdentifier: Assembly-CSharp::TMBS.Runtime.Config.TmbsBuildableData
+  id: tile_red
+  displayName: "Bloque Rojo"
+  category: "Bloques"
+  tile: {fileID: 11400000, guid: 50202cb830faae04ba588237a9a8923b, type: 2}
+  previewSprite: {fileID: 8237715836171530394, guid: 459c4b590715b6243aca4c6c9d201731, type: 3}
+  workCost: 2
+  resourceCost: 1
+  isBlueprint: 0

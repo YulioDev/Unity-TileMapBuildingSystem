@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace TMBS.Core.Validation
 {
-    public enum OccupancySourceMode
+    public enum OccupancyCheck
     {
         MetadataOnly,
         TilemapOnly,
@@ -13,13 +13,13 @@ namespace TMBS.Core.Validation
     }
 
     [Serializable]
-    public sealed class OccupancyValidator : IValidator, IInjectableValidator, IOccupancySourceInjectable
+    public sealed class OccupancyValidator : IValidator, IMetadataConsumer, IOccupancyConsumer
     {
         public bool allowOverwrite = false;
         public bool skipOccupiedCells = true;
         public bool markBlockedArea = true;
-        public bool validateAlternateBehaviour = false;
-        public OccupancySourceMode occupancySourceMode = OccupancySourceMode.MetadataOnly;
+        public bool checkOnErase = false;
+        public OccupancyCheck sourceMode = OccupancyCheck.MetadataOnly;
 
         [NonSerialized] private IMetadataStore _metadata;
         [NonSerialized] private ICellOccupancySource _occupancySource;
@@ -39,13 +39,13 @@ namespace TMBS.Core.Validation
             bool metadataOccupied = _metadata != null && _metadata.TryGet(cell, out _);
             bool tilemapOccupied = _occupancySource != null && _occupancySource.HasTile(cell);
 
-            switch (occupancySourceMode)
+            switch (sourceMode)
             {
-                case OccupancySourceMode.MetadataOnly:
+                case OccupancyCheck.MetadataOnly:
                     return metadataOccupied;
-                case OccupancySourceMode.TilemapOnly:
+                case OccupancyCheck.TilemapOnly:
                     return tilemapOccupied;
-                case OccupancySourceMode.MetadataOrTilemap:
+                case OccupancyCheck.MetadataOrTilemap:
                     return metadataOccupied || tilemapOccupied;
                 default:
                     return metadataOccupied;
@@ -54,7 +54,7 @@ namespace TMBS.Core.Validation
 
         public ValidationResult Validate(in PipelineContext ctx, ValidationMode mode)
         {
-            if (ctx.AlternateBehaviour && !validateAlternateBehaviour) return ValidationResult.Valid;
+            if (ctx.AlternateBehaviour && !checkOnErase) return ValidationResult.Valid;
 
             var opBounds = ValidationUtil.GetOperationBounds(in ctx);
 

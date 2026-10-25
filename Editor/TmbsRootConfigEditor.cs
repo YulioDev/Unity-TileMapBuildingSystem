@@ -110,7 +110,8 @@ public class TmbsRootConfigEditor : Editor
             }
             else if (iterator.name != "validators"
                      && iterator.name != "input"
-                     && iterator.name != "pendingConstruction"
+                     && iterator.name != "pending"
+                     
                      && iterator.name != "pendingDebug")
             {
                 EditorGUILayout.PropertyField(iterator, true);
@@ -148,7 +149,7 @@ public class TmbsRootConfigEditor : Editor
         }
 
         // Pending Construction
-        var pendingProp = serializedObject.FindProperty("pendingConstruction");
+        var pendingProp = serializedObject.FindProperty("pending");
         if (pendingProp != null)
         {
             EditorGUILayout.LabelField("Pending Construction", EditorStyles.boldLabel);
@@ -186,7 +187,7 @@ public class TmbsRootConfigEditor : Editor
         switch (mode)
         {
             case TmbsInputMode.Legacy:
-                DrawLegacyFields(inputProp);
+                DrawLegacyFields();
                 break;
 
             case TmbsInputMode.InputActions:
@@ -217,16 +218,11 @@ public class TmbsRootConfigEditor : Editor
             EditorGUILayout.PropertyField(prop);
     }
 
-    private void DrawLegacyFields(SerializedProperty inputProp)
+    private void DrawLegacyFields()
     {
         EditorGUI.indentLevel++;
-        var subModeProp = inputProp.FindPropertyRelative("legacySubMode");
-        if (subModeProp != null)
-        {
-            EditorGUILayout.PropertyField(subModeProp, new GUIContent("Device"));
-        }
         EditorGUILayout.HelpBox(
-            "Legacy: Uses Unity's built-in Input Manager. Currently supports Mouse mode.",
+            "Legacy: Uses Unity's built-in Input Manager (Mouse & Keyboard).",
             MessageType.Info);
         EditorGUI.indentLevel--;
     }

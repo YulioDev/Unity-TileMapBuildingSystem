@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using TMBS.Runtime.Config;
 using UnityEngine;
 
@@ -5,11 +6,11 @@ namespace TMBS.Core.Pending
 {
     public sealed class PendingDebugBuilder
     {
-        private readonly IPendingConstructionWorkApi _workApi;
+        private readonly IPendingWorkApi _workApi;
         private readonly TmbsPendingDebugConfig _config;
         private int _cursor;
 
-        public PendingDebugBuilder(IPendingConstructionWorkApi workApi, TmbsPendingDebugConfig config)
+        public PendingDebugBuilder(IPendingWorkApi workApi, TmbsPendingDebugConfig config)
         {
             _workApi = workApi;
             _config = config;
@@ -24,17 +25,29 @@ namespace TMBS.Core.Pending
             if (all == null || all.Count == 0)
                 return;
 
+            IReadOnlyList<PendingOrder> ordered = all;
+            if (_config.buildOrder == TMBS.Runtime.Config.PendingDebugBuildOrder.ByCellPosition)
+            {
+                var sorted = new List<PendingOrder>(all);
+                sorted.Sort((a, b) =>
+                {
+                    int cmp = a.Bounds.position.x.CompareTo(b.Bounds.position.x);
+                    return cmp != 0 ? cmp : a.Bounds.position.y.CompareTo(b.Bounds.position.y);
+                });
+                ordered = sorted;
+            }
+
             int processed = 0;
             int safety = 0;
 
-            while (processed < _config.cellsPerStep && safety < all.Count)
+            while (processed < _config.cellsPerStep && safety < ordered.Count)
             {
                 safety++;
 
-                if (_cursor >= all.Count)
+                if (_cursor >= ordered.Count)
                     _cursor = 0;
 
-                var pending = all[_cursor++];
+                var pending = ordered[_cursor++];
                 if (pending == null || pending.Cells == null)
                     continue;
 
@@ -43,7 +56,7 @@ namespace TMBS.Core.Pending
             }
         }
 
-        private bool TryProcessPending(PendingConstruction pending)
+        private bool TryProcessPending(PendingOrder pending)
         {
             var cells = pending.Cells;
 

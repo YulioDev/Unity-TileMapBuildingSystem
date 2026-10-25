@@ -32,7 +32,7 @@ namespace TMBS.Runtime.Config
         [Tooltip("If true, pending state is rendered into a debug tilemap.")]
         public bool renderDebugTiles = true;
 
-        [Tooltip("Visual archetype used to render pending/debug states.")]
-        public TmbsTileArchetypeConfig tileArchetype = new TmbsTileArchetypeConfig();
+        [Tooltip("Visual configuration used to render pending/debug states.")]
+        public TmbsStateTileConfig tileArchetype = new TmbsStateTileConfig();
     }
 }

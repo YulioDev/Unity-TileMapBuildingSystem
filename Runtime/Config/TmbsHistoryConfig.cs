@@ -17,6 +17,6 @@ namespace TMBS.Runtime.Config
         public bool clearOnDisable = false;
 
         [Tooltip("If enabled, the system will emit events identifying which regions of the tilemap were modified.")]
-        public bool emitRegionModifiedEvents = true;
+        public bool emitRegionEvents = true;
     }
 }

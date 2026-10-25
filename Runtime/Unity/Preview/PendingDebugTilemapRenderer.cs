@@ -8,14 +8,14 @@ namespace TMBS.Unity.Preview
     public sealed class PendingDebugTilemapRenderer
     {
         private readonly Tilemap _tilemap;
-        private readonly TmbsTileArchetypeConfig _archetype;
-        private readonly bool _useOriginalTileFallback;
+        private readonly TmbsStateTileConfig _archetype;
+        private readonly bool _fallbackToOriginal;
 
-        public PendingDebugTilemapRenderer(Tilemap tilemap, TmbsTileArchetypeConfig archetype, bool useOriginalTileFallback = true)
+        public PendingDebugTilemapRenderer(Tilemap tilemap, TmbsStateTileConfig archetype, bool fallbackToOriginal = true)
         {
             _tilemap = tilemap != null ? tilemap : throw new System.ArgumentNullException(nameof(tilemap));
             _archetype = archetype != null ? archetype : throw new System.ArgumentNullException(nameof(archetype));
-            _useOriginalTileFallback = useOriginalTileFallback;
+            _fallbackToOriginal = fallbackToOriginal;
         }
         
         public void Clear()
@@ -26,7 +26,7 @@ namespace TMBS.Unity.Preview
             }
         }
 
-        public void RenderCell(PendingConstructionCell cell, PendingConstructionState state)
+        public void RenderCell(PendingCell cell, PendingState state)
         {
             if (_tilemap == null || _archetype == null)
                 return;
@@ -45,45 +45,46 @@ namespace TMBS.Unity.Preview
                 return;
 
             _tilemap.SetTile(cell, null);
+            _tilemap.SetColor(cell, Color.white);
         }
 
-        private TileBase ResolveTile(PendingConstructionState state, PendingConstructionCell cell)
+        private TileBase ResolveTile(PendingState state, PendingCell cell)
         {
             switch (state)
             {
-                case PendingConstructionState.WaitingForResources:
+                case PendingState.WaitingForResources:
                     return _archetype.ResolveWaitingResourcesTile() ?? FallbackTile(cell);
-                case PendingConstructionState.ReadyToBuild:
+                case PendingState.ReadyToBuild:
                     return _archetype.ResolveReadyTile() ?? FallbackTile(cell);
-                case PendingConstructionState.InProgress:
+                case PendingState.InProgress:
                     return _archetype.ResolveInProgressTile() ?? FallbackTile(cell);
-                case PendingConstructionState.Completed:
+                case PendingState.Completed:
                     return null;
-                case PendingConstructionState.Cancelled:
+                case PendingState.Cancelled:
                     return _archetype.ResolveInvalidTile() ?? FallbackTile(cell);
                 default:
                     return _archetype.ResolvePendingTile() ?? FallbackTile(cell);
             }
         }
 
-        private TileBase FallbackTile(PendingConstructionCell cell)
+        private TileBase FallbackTile(PendingCell cell)
         {
-            return _useOriginalTileFallback ? cell.Tile : null;
+            return _fallbackToOriginal ? cell.Tile : null;
         }
 
-        private Color ResolveColor(PendingConstructionState state)
+        private Color ResolveColor(PendingState state)
         {
             switch (state)
             {
-                case PendingConstructionState.WaitingForResources:
+                case PendingState.WaitingForResources:
                     return _archetype.waitingResourcesColor;
-                case PendingConstructionState.ReadyToBuild:
+                case PendingState.ReadyToBuild:
                     return _archetype.readyColor;
-                case PendingConstructionState.InProgress:
+                case PendingState.InProgress:
                     return _archetype.inProgressColor;
-                case PendingConstructionState.Completed:
+                case PendingState.Completed:
                     return Color.clear;
-                case PendingConstructionState.Cancelled:
+                case PendingState.Cancelled:
                     return _archetype.invalidColor;
                 default:
                     return _archetype.pendingColor;

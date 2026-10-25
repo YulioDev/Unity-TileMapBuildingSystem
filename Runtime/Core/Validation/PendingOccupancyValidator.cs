@@ -5,11 +5,11 @@ using TMBS.Core.Pipeline;
 namespace TMBS.Core.Validation
 {
     [Serializable]
-    public sealed class PendingOccupancyValidator : IValidator, IPendingStoreInjectable
+    public sealed class PendingOccupancyValidator : IValidator, IPendingStoreConsumer
     {
-        [NonSerialized] private IPendingConstructionStore _store;
+        [NonSerialized] private IPendingStore _store;
 
-        public void InjectStore(IPendingConstructionStore store) => _store = store;
+        public void InjectStore(IPendingStore store) => _store = store;
 
         public ValidationResult Validate(in PipelineContext ctx, ValidationMode mode)
         {
@@ -25,7 +25,7 @@ namespace TMBS.Core.Validation
             for (int i = 0; i < len; i++)
             {
                 var cell = write.CellAt(i);
-                if (_store.TryGetByCell(cell, out _, out _))
+                if (_store.TryGetByCell(cell, out var pending, out int idx) && !pending.Cells[idx].IsCompleted)
                 {
                     anyBlocked = true;
                     blocked.Bits[i] = true;

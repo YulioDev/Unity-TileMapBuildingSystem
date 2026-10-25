@@ -83,11 +83,12 @@ namespace TMBS.Core.Pipeline
             if (!intent.AlternateBehaviour && _selectionState != null)
             {
                 _ctx.SelectedTile = _selectionState.CurrentTile;
+                _ctx.BuildableData = _selectionState.CurrentData;
             }
 
             if (_activeMode != null)
             {
-                var interpreted = _activeMode.Interpret(in intent, _ctx);
+                _activeMode.Interpret(in intent, _ctx);
             }
 
             if (_clampDragBounds && _ctx.HasDragBounds)

@@ -52,21 +52,35 @@ namespace TMBS.Runtime.Interface
         [Header("Build Selection")]
         [Tooltip("Defines what to build. Assign a SingleTileBuildable for single tiles, or a blueprint descriptor.")]
         [SerializeReference]
-        private BuildableDescriptor currentBuildable = new SingleTileBuildable();
+        private BuildableDef currentBuildable = new SingleTileBuildable();
 
         /// <summary>
-        /// The currently active buildable descriptor. Read-only.
+        /// The currently active buildable definition. Read-only.
         /// </summary>
-        public BuildableDescriptor CurrentBuildable => currentBuildable;
+        public BuildableDef CurrentBuildable => currentBuildable;
+
+        /// <summary>
+        /// Exposes the event bus so external systems (such as UI) can listen to validation, selection, and pending events.
+        /// </summary>
+        public IEventBus Events => _events;
+
+        /// <summary>
+        /// Exposes the unique instance identifier for event routing and UI filtering.
+        /// </summary>
+        public string InstanceId => instanceId;
+
+        /// <summary>
+        /// Exposes the root configuration asset.
+        /// </summary>
+        public TmbsRootConfig RootConfig => rootConfig;
 
         /// <summary>
         /// Changes the active buildable at runtime. Publishes a selection
         /// changed event so the pipeline and preview update immediately.
         /// Call this from your UI tile-selection code.
         /// </summary>
-        public void SetBuildable(BuildableDescriptor descriptor)
+        public void SetBuildable(BuildableDef descriptor)
         {
-            if (descriptor == null) return;
             currentBuildable = descriptor;
             PublishSelectionChanged();
         }
@@ -77,7 +91,94 @@ namespace TMBS.Runtime.Interface
         /// </summary>
         public void SetBuildTile(TileBase tile)
         {
+            if (tile == null)
+            {
+                ClearSelection();
+                return;
+            }
             SetBuildable(new SingleTileBuildable(tile));
+        }
+
+        /// <summary>
+        /// Sets the active buildable from a TmbsBuildableData asset.
+        /// Call this from your UI when the player selects a building.
+        /// </summary>
+        public void SetBuildableData(TmbsBuildableData buildableData)
+        {
+            if (buildableData == null)
+            {
+                ClearSelection();
+                return;
+            }
+            SetBuildable(new SingleTileBuildable(buildableData));
+        }
+
+        /// <summary>
+        /// Clears the active buildable selection and hides the preview.
+        /// </summary>
+        public void ClearSelection()
+        {
+            _pipeline?.CancelActiveOperation();
+            currentBuildable = null;
+            _preview?.Hide();
+            if (_events != null)
+            {
+                _events.Publish(new SelectionChangedEvent(instanceId, default));
+            }
+        }
+
+        /// <summary>
+        /// Undoes the last immediate placement command.
+        /// </summary>
+        public bool Undo()
+        {
+            _pipeline?.CancelActiveOperation();
+            _preview?.Hide();
+            if (rootConfig != null && rootConfig.history != null && rootConfig.history.enableUndoRedo)
+            {
+                return _history?.TryUndo() ?? false;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Redoes the last undone placement command.
+        /// </summary>
+        public bool Redo()
+        {
+            _pipeline?.CancelActiveOperation();
+            _preview?.Hide();
+            if (rootConfig != null && rootConfig.history != null && rootConfig.history.enableUndoRedo)
+            {
+                return _history?.TryRedo() ?? false;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Cancels any active drag or preview operation.
+        /// </summary>
+        public void CancelActiveOperation()
+        {
+            _pipeline?.CancelActiveOperation();
+            _preview?.Hide();
+        }
+
+        /// <summary>
+        /// Switches the execution mode (Immediate vs Pending) at runtime and re-composes the pipeline.
+        /// </summary>
+        public void SwitchExecutionMode(ExecutionMode newMode)
+        {
+            if (rootConfig == null) return;
+            if (rootConfig.executionMode == newMode && _state == InterfaceState.Composed) return;
+
+            rootConfig.executionMode = newMode;
+
+            if (isActiveAndEnabled)
+            {
+                OnDisable();
+                OnEnable();
+            }
         }
 
         private enum InterfaceState
@@ -99,10 +200,11 @@ namespace TMBS.Runtime.Interface
         private IPreviewRenderer _preview;
         private TileSelectionState _tileSelectionState;
         private TMBS.Core.Execution.IBuildExecutor _executor;
-        private TMBS.Core.Pending.IPendingConstructionWorkApi _pendingWorkApi;
+        private TMBS.Core.Pending.IPendingWorkApi _pendingWorkApi;
 
-        public TMBS.Core.Pending.IPendingConstructionWorkApi PendingWorkApi => _pendingWorkApi;
-        private PreviewPolicyEvaluator _previewEvaluator;
+        public TMBS.Core.Pending.IPendingWorkApi PendingWorkApi => _pendingWorkApi;
+        public TMBS.Core.Pending.IPendingStore PendingStore => (_pendingWorkApi as TMBS.Core.Pending.PendingWorkApi)?.Store;
+        private PreviewToggle _previewEvaluator;
         private IBuildMode _activeMode;
 
         private TMBS.Core.Pending.PendingDebugBuilder _pendingDebugBuilder;
@@ -119,15 +221,31 @@ namespace TMBS.Runtime.Interface
         private IDisposable _pendingCompletedSubscription;
 
         private IBuildInputAdapter _externalInputAdapter;
-        private IBuildInputAdapterProvider _externalInputProvider;
+        private IInputAdapterFactory _externalInputProvider;
         private bool _externalInputCreatedByProvider;
         private bool _inputCreatedInternally;
+
+        private void Awake()
+        {
+            EnsureDebugMenuComponent();
+        }
+
+        private void EnsureDebugMenuComponent()
+        {
+            if (rootConfig != null && rootConfig.debugMenu != null && rootConfig.debugMenu.enabled)
+            {
+                if (GetComponent<TMBS.Runtime.Debugging.TmbsDebugMenu>() == null)
+                {
+                    gameObject.AddComponent<TMBS.Runtime.Debugging.TmbsDebugMenu>();
+                }
+            }
+        }
 
         private void Update()
         {
             TMBS.Core.Validation.CellMaskPool.ReclaimAll();
 
-            if (_input is ITickableInputAdapter tickable)
+            if (_input is IUpdatableInput tickable)
             {
                 tickable.Tick(Time.deltaTime);
             }
@@ -139,7 +257,7 @@ namespace TMBS.Runtime.Interface
         {
             if (rootConfig == null) return Camera.main;
 
-            if (rootConfig.GetRuntimeCameraMode() == TmbsCameraMode.AlwaysMainCamera)
+            if (rootConfig.GetCameraMode() == TmbsCameraMode.AlwaysMainCamera)
                 return Camera.main;
 
             if (worldCamera == null)
@@ -167,7 +285,7 @@ namespace TMBS.Runtime.Interface
             return true;
         }
 
-        public bool SetExternalInputProvider(IBuildInputAdapterProvider provider)
+        public bool SetExternalInputProvider(IInputAdapterFactory provider)
         {
             if (_state == InterfaceState.Composing || _state == InterfaceState.Composed)
             {
@@ -282,7 +400,7 @@ namespace TMBS.Runtime.Interface
                 return new UnityEngine.Plane(Vector3.back, Vector3.zero);
             };
 
-            return new TMBS.Unity.Input.LegacyMouseBuildInputAdapter(ResolveCamera, planeProvider);
+            return new TMBS.Unity.Input.LegacyMouseAdapter(ResolveCamera, planeProvider);
         }
 
 #if ENABLE_INPUT_SYSTEM
@@ -297,7 +415,7 @@ namespace TMBS.Runtime.Interface
             };
 
             var cfg = rootConfig.input;
-            return new TMBS.Unity.Input.InputActionsBuildInputAdapter(
+            return new TMBS.Unity.Input.InputSystemAdapter(
                 ResolveCamera,
                 planeProvider,
                 cfg.pointAction,
@@ -316,7 +434,7 @@ namespace TMBS.Runtime.Interface
 
             if (_externalInputProvider != null &&
                 _externalInputProvider.TryCreateInputAdapter(
-                    new TMBS.Core.Input.BuildInputAdapterContext(instanceId),
+                    new TMBS.Core.Input.InputAdapterContext(instanceId),
                     out var adapter))
             {
                 _externalInputAdapter = adapter;
@@ -390,14 +508,17 @@ namespace TMBS.Runtime.Interface
                 return;
             }
 
-            var composition = new TmbsCompositionRoot();
+            EnsureDebugMenuComponent();
+
+            var composition = new TmbsFactory();
             var context = composition.Compose(
                 rootConfig, 
                 instanceId, 
                 resolvedInput, 
                 targetTilemap, 
                 previewTilemap, 
-                ResolveAttachedSceneValidators());
+                ResolveAttachedSceneValidators(),
+                _events);
                 
             _input = context.Input;
             _pipeline = context.Pipeline;
@@ -414,7 +535,7 @@ namespace TMBS.Runtime.Interface
             
             if (_events != null)
             {
-                _selectionChangedSubscription = _events.Subscribe<BuildSelectionChangedEvent>(OnBuildSelectionChanged);
+                _selectionChangedSubscription = _events.Subscribe<SelectionChangedEvent>(OnBuildSelectionChanged);
             }
 
             if (_input != null)
@@ -425,6 +546,12 @@ namespace TMBS.Runtime.Interface
             else if (rootConfig.input != null && rootConfig.input.mode != TmbsInputMode.None)
             {
                 Debug.LogError("TMBS: Input Adapter is unassigned or invalid.", this);
+            }
+
+            if ((currentBuildable == null || currentBuildable.ResolvePrimaryTile() == null) &&
+                rootConfig != null && rootConfig.defaultBuildable != null)
+            {
+                SetBuildableData(rootConfig.defaultBuildable);
             }
 
             PublishSelectionChanged();
@@ -438,22 +565,16 @@ namespace TMBS.Runtime.Interface
         {
             if (_events == null) return;
 
-            BuildableDescriptor resolved = currentBuildable;
+            BuildableDef resolved = currentBuildable;
 
             if (resolved == null || resolved.ResolvePrimaryTile() == null)
             {
-                // Fallback for backward compatibility with rootConfig tile fields
-                if (rootConfig != null && rootConfig.buildTile != null)
-                {
-                    resolved = new SingleTileBuildable(rootConfig.buildTile);
-                }
+                _events.Publish(new SelectionChangedEvent(instanceId, default));
+                return;
             }
 
-            if (resolved == null || resolved.ResolvePrimaryTile() == null)
-                return;
-
-            var data = new BuildSelectionData(resolved.ResolvePrimaryTile());
-            _events.Publish(new BuildSelectionChangedEvent(instanceId, data));
+            var data = new BuildSelectionData(resolved.ResolvePrimaryTile(), resolved.ResolveData());
+            _events.Publish(new SelectionChangedEvent(instanceId, data));
         }
 
         private void SetupPendingVisual()
@@ -461,7 +582,7 @@ namespace TMBS.Runtime.Interface
             if (rootConfig == null || rootConfig.executionMode != ExecutionMode.Pending)
                 return;
 
-            var debugConfig = rootConfig.GetRuntimePendingDebugConfig();
+            var debugConfig = rootConfig.GetPendingDebugConfig();
             if (!debugConfig.renderDebugTiles || debugConfig.tileArchetype == null)
                 return;
 
@@ -474,17 +595,17 @@ namespace TMBS.Runtime.Interface
             _pendingDebugRenderer = new TMBS.Unity.Preview.PendingDebugTilemapRenderer(
                 pendingTilemap,
                 debugConfig.tileArchetype,
-                debugConfig.tileArchetype.useOriginalTileAsFallback);
+                debugConfig.tileArchetype.fallbackToOriginal);
 
             if (_events != null)
             {
-                _pendingCreatedSubscription = _events.Subscribe<PendingConstructionCreatedEvent>(OnPendingCreated);
-                _pendingChangedSubscription = _events.Subscribe<PendingConstructionChangedEvent>(OnPendingChanged);
-                _pendingCompletedSubscription = _events.Subscribe<PendingConstructionCompletedEvent>(OnPendingCompleted);
+                _pendingCreatedSubscription = _events.Subscribe<PendingCreatedEvent>(OnPendingCreated);
+                _pendingChangedSubscription = _events.Subscribe<PendingChangedEvent>(OnPendingChanged);
+                _pendingCompletedSubscription = _events.Subscribe<PendingCompletedEvent>(OnPendingCompleted);
             }
         }
 
-        private void OnPendingCreated(PendingConstructionCreatedEvent evt)
+        private void OnPendingCreated(PendingCreatedEvent evt)
         {
             if (evt.InstanceId != instanceId) return;
             if (_pendingDebugRenderer == null || _pendingWorkApi == null) return;
@@ -503,7 +624,7 @@ namespace TMBS.Runtime.Interface
             }
         }
 
-        private void OnPendingChanged(PendingConstructionChangedEvent evt)
+        private void OnPendingChanged(PendingChangedEvent evt)
         {
             if (evt.InstanceId != instanceId) return;
             if (_pendingDebugRenderer == null || _pendingWorkApi == null) return;
@@ -516,7 +637,7 @@ namespace TMBS.Runtime.Interface
                 if (pending.Id != evt.PendingId) continue;
                 foreach (var cell in pending.Cells)
                 {
-                    if (cell.IsWorkComplete)
+                    if (cell.IsCompleted)
                         _pendingDebugRenderer.ClearCell(cell.Cell);
                     else
                         _pendingDebugRenderer.RenderCell(cell, pending.State);
@@ -525,7 +646,7 @@ namespace TMBS.Runtime.Interface
             }
         }
 
-        private void OnPendingCompleted(PendingConstructionCompletedEvent evt)
+        private void OnPendingCompleted(PendingCompletedEvent evt)
         {
             if (evt.InstanceId != instanceId) return;
             if (_pendingDebugRenderer == null) return;
@@ -580,7 +701,7 @@ namespace TMBS.Runtime.Interface
             _state = InterfaceState.Disabled;
         }
 
-        private void OnBuildSelectionChanged(BuildSelectionChangedEvent evt)
+        private void OnBuildSelectionChanged(SelectionChangedEvent evt)
         {
             if (evt.InstanceId != instanceId) return;
 
@@ -616,6 +737,12 @@ namespace TMBS.Runtime.Interface
             if (RequiresInputFocus(intent.Type) && !_focus.CanConsumeMutating(instanceId, intent))
             {
                 _pipeline?.CancelActiveOperation();
+                _preview?.Hide();
+                return;
+            }
+
+            if (intent.Type == BuildIntentType.PointMove && !_focus.CanConsumeMutating(instanceId, intent))
+            {
                 _preview?.Hide();
                 return;
             }
@@ -696,7 +823,7 @@ namespace TMBS.Runtime.Interface
                 return;
             }
 
-            if (ctx.Decision.Type != Core.Execution.ExecutionDecisionType.Reject)
+            if (ctx.Decision.Type != Core.Execution.ExecutionResult.Reject)
             {
                 _executor.Execute(in ctx, targetTilemap);
                 _preview.Hide();

@@ -1,12 +1,12 @@
 using System;
+using TMBS.Runtime.Config;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
 namespace TMBS.Core.Pending
 {
-    public enum PendingConstructionState
+    public enum PendingState
     {
-        Planned,
         WaitingForResources,
         ReadyToBuild,
         InProgress,
@@ -14,14 +14,16 @@ namespace TMBS.Core.Pending
         Cancelled
     }
 
-    public readonly struct PendingConstructionCell
+    public readonly struct PendingCell
     {
         public readonly Vector3Int Cell;
         public readonly TileBase Tile;
+        public readonly TmbsBuildableData BuildableData;
         public readonly int WorkRequired;
         public readonly int WorkDone;
         public readonly int ResourceRequired;
         public readonly int ResourceDelivered;
+        public readonly bool IsCompleted;
 
         public bool IsReadyForWork =>
             ResourceRequired == 0 || ResourceDelivered >= ResourceRequired;
@@ -29,34 +31,70 @@ namespace TMBS.Core.Pending
         public bool IsWorkComplete =>
             WorkDone >= WorkRequired;
 
-        public PendingConstructionCell(
+        public PendingCell(
             Vector3Int cell,
             TileBase tile,
             int workRequired,
             int workDone,
             int resourceRequired,
             int resourceDelivered)
+            : this(cell, tile, null, workRequired, workDone, resourceRequired, resourceDelivered, false)
+        {
+        }
+
+        public PendingCell(
+            Vector3Int cell,
+            TileBase tile,
+            TmbsBuildableData buildableData,
+            int workRequired,
+            int workDone,
+            int resourceRequired,
+            int resourceDelivered)
+            : this(cell, tile, buildableData, workRequired, workDone, resourceRequired, resourceDelivered, false)
+        {
+        }
+
+        public PendingCell(
+            Vector3Int cell,
+            TileBase tile,
+            TmbsBuildableData buildableData,
+            int workRequired,
+            int workDone,
+            int resourceRequired,
+            int resourceDelivered,
+            bool isCompleted)
         {
             Cell = cell;
             Tile = tile;
+            BuildableData = buildableData;
             WorkRequired = workRequired;
             WorkDone = workDone;
             ResourceRequired = resourceRequired;
             ResourceDelivered = resourceDelivered;
+            IsCompleted = isCompleted;
         }
 
-        public PendingConstructionCell WithWorkAdded(int amount) =>
-            new PendingConstructionCell(
-                Cell, Tile,
+        public PendingCell WithWorkAdded(int amount) =>
+            new PendingCell(
+                Cell, Tile, BuildableData,
                 WorkRequired,
                 Math.Min(WorkDone + amount, WorkRequired),
-                ResourceRequired, ResourceDelivered);
+                ResourceRequired, ResourceDelivered,
+                IsCompleted);
 
-        public PendingConstructionCell WithResourcesAdded(int amount) =>
-            new PendingConstructionCell(
-                Cell, Tile,
+        public PendingCell WithResourcesAdded(int amount) =>
+            new PendingCell(
+                Cell, Tile, BuildableData,
                 WorkRequired, WorkDone,
                 ResourceRequired,
-                Math.Min(ResourceDelivered + amount, ResourceRequired));
+                Math.Min(ResourceDelivered + amount, ResourceRequired),
+                IsCompleted);
+
+        public PendingCell WithCompleted() =>
+            new PendingCell(
+                Cell, Tile, BuildableData,
+                WorkRequired, WorkDone,
+                ResourceRequired, ResourceDelivered,
+                true);
     }
 }

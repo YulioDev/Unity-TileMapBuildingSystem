@@ -5,12 +5,12 @@ using UnityEngine;
 
 namespace TMBS.Core.Events
 {
-    public readonly struct BuildSelectionChangedEvent
+    public readonly struct SelectionChangedEvent
     {
         public readonly string InstanceId;
         public readonly BuildSelectionData Selection;
 
-        public BuildSelectionChangedEvent(string instanceId, BuildSelectionData selection)
+        public SelectionChangedEvent(string instanceId, BuildSelectionData selection)
         {
             InstanceId = instanceId;
             Selection  = selection;
@@ -47,13 +47,13 @@ namespace TMBS.Core.Events
         }
     }
 
-    public readonly struct PendingConstructionCreatedEvent
+    public readonly struct PendingCreatedEvent
     {
         public readonly string InstanceId;
         public readonly int PendingId;
         public readonly BoundsInt Bounds;
 
-        public PendingConstructionCreatedEvent(string instanceId, int pendingId, BoundsInt bounds)
+        public PendingCreatedEvent(string instanceId, int pendingId, BoundsInt bounds)
         {
             InstanceId = instanceId;
             PendingId = pendingId;
@@ -61,13 +61,13 @@ namespace TMBS.Core.Events
         }
     }
 
-    public readonly struct PendingConstructionChangedEvent
+    public readonly struct PendingChangedEvent
     {
         public readonly string InstanceId;
         public readonly int PendingId;
-        public readonly PendingConstructionState State;
+        public readonly PendingState State;
 
-        public PendingConstructionChangedEvent(string instanceId, int pendingId, PendingConstructionState state)
+        public PendingChangedEvent(string instanceId, int pendingId, PendingState state)
         {
             InstanceId = instanceId;
             PendingId = pendingId;
@@ -75,13 +75,13 @@ namespace TMBS.Core.Events
         }
     }
 
-    public readonly struct PendingConstructionCompletedEvent
+    public readonly struct PendingCompletedEvent
     {
         public readonly string InstanceId;
         public readonly int PendingId;
         public readonly BoundsInt Bounds;
 
-        public PendingConstructionCompletedEvent(string instanceId, int pendingId, BoundsInt bounds)
+        public PendingCompletedEvent(string instanceId, int pendingId, BoundsInt bounds)
         {
             InstanceId = instanceId;
             PendingId = pendingId;
@@ -89,4 +89,3 @@ namespace TMBS.Core.Events
         }
     }
 }
-

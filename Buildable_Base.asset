@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ac54f485ac2c4bd429a68850fd675f64, type: 3}
+  m_Name: Buildable_Base
+  m_EditorClassIdentifier: Assembly-CSharp::TMBS.Runtime.Config.TmbsBuildableData
+  id: tile_base
+  displayName: "Estructura Base"
+  category: "Estructura"
+  tile: {fileID: 11400000, guid: 154a0bd315a96f144be4d5c9cc2fe362, type: 2}
+  previewSprite: {fileID: 8764452231374864455, guid: f78a5410524e7fa439f97e2751dd722f, type: 3}
+  workCost: 1
+  resourceCost: 0
+  isBlueprint: 0
