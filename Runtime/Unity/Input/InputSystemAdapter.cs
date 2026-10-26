@@ -57,7 +57,6 @@ namespace TMBS.Unity.Input
             hasDrag:               _dragRef?.action != null,
             hasUndo:               _undoRef?.action != null,
             hasRedo:               _redoRef?.action != null,
-            hasPipette:            false,
             hasAlternateModifier:  _alternateRef?.action != null);
 
         public event Action<BuildIntent> BuildIntentRaised;

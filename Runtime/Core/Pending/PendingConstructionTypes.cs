@@ -31,6 +31,13 @@ namespace TMBS.Core.Pending
         public bool IsWorkComplete =>
             WorkDone >= WorkRequired;
 
+        public int WorkAllowed(ResourceRequirement policy)
+        {
+            if (ResourceRequired <= 0 || policy != ResourceRequirement.AllowPartialDelivery)
+                return IsReadyForWork ? WorkRequired : 0;
+            return WorkRequired * ResourceDelivered / ResourceRequired;
+        }
+
         public PendingCell(
             Vector3Int cell,
             TileBase tile,

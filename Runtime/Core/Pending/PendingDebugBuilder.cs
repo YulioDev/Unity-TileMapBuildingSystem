@@ -8,12 +8,17 @@ namespace TMBS.Core.Pending
     {
         private readonly IPendingWorkApi _workApi;
         private readonly TmbsPendingDebugConfig _config;
+        private readonly ResourceRequirement _policy;
         private int _cursor;
 
-        public PendingDebugBuilder(IPendingWorkApi workApi, TmbsPendingDebugConfig config)
+        public PendingDebugBuilder(
+            IPendingWorkApi workApi, 
+            TmbsPendingDebugConfig config,
+            ResourceRequirement policy = ResourceRequirement.None)
         {
             _workApi = workApi;
             _config = config;
+            _policy = policy;
         }
 
         public void Step()
@@ -64,21 +69,33 @@ namespace TMBS.Core.Pending
             {
                 var cell = cells[i];
 
-                if (_config.autoDeliverResources && !cell.IsReadyForWork)
+                if (cell.IsCompleted)
+                    continue;
+
+                if (cell.IsWorkComplete)
                 {
-                    _workApi.TryDeliverResources(cell.Cell, cell.ResourceRequired);
+                    _workApi.TryCompleteCell(cell.Cell);
                     return true;
                 }
 
-                if (!cell.IsReadyForWork || cell.IsWorkComplete)
-                    continue;
+                int allowedWork = cell.WorkAllowed(_policy);
+                if (cell.WorkDone < allowedWork)
+                {
+                    int workToAdd = Mathf.Min(allowedWork - cell.WorkDone, _config.workPerStep);
+                    _workApi.TryAddWork(cell.Cell, workToAdd);
 
-                _workApi.TryAddWork(cell.Cell, _config.workPerStep);
+                    if (_workApi.TryGetCellStatus(cell.Cell, out var updated) && updated.IsWorkComplete)
+                        _workApi.TryCompleteCell(cell.Cell);
 
-                if (_workApi.TryGetCellStatus(cell.Cell, out var updated) && updated.IsWorkComplete)
-                    _workApi.TryCompleteCell(cell.Cell);
+                    return true;
+                }
 
-                return true;
+                if (_config.autoDeliverResources && cell.ResourceDelivered < cell.ResourceRequired)
+                {
+                    int needed = cell.ResourceRequired - cell.ResourceDelivered;
+                    _workApi.TryDeliverResources(cell.Cell, needed);
+                    return true;
+                }
             }
 
             return false;

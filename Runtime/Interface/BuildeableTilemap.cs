@@ -373,6 +373,11 @@ namespace TMBS.Runtime.Interface
 #endif
                     break;
 
+                case TmbsInputMode.ExternalProvided:
+                    resolvedInput = ResolveExternalInputAdapter();
+                    if (resolvedInput == null) return false;
+                    break;
+
                 default:
                     Debug.LogError($"TMBS: Input mode {inputConfig.mode} is not supported.", this);
                     return false;
@@ -530,6 +535,7 @@ namespace TMBS.Runtime.Interface
             _tileSelectionState = context.SelectionState;
             _executor = context.Executor;
             _pendingWorkApi = context.PendingWorkApi;
+            _pendingDebugBuilder = context.PendingDebugBuilder;
             _previewEvaluator = context.PreviewEvaluator;
             _activeMode = context.ActiveMode;
             

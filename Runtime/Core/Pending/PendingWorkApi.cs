@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using TMBS.Core.Events;
 using TMBS.Core.Metadata;
+using TMBS.Runtime.Config;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
@@ -15,6 +16,7 @@ namespace TMBS.Core.Pending
         private readonly IMetadataStore _metadata;
         private readonly string _instanceId;
         private readonly bool _allowPartialCompletion;
+        private readonly ResourceRequirement _resourcePolicy;
 
         public IPendingStore Store => _store;
 
@@ -24,7 +26,8 @@ namespace TMBS.Core.Pending
             Tilemap targetTilemap,
             IMetadataStore metadata,
             string instanceId,
-            bool allowPartialCompletion = true)
+            bool allowPartialCompletion = true,
+            ResourceRequirement resourcePolicy = ResourceRequirement.None)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _events = events;
@@ -32,6 +35,7 @@ namespace TMBS.Core.Pending
             _metadata = metadata;
             _instanceId = instanceId;
             _allowPartialCompletion = allowPartialCompletion;
+            _resourcePolicy = resourcePolicy;
         }
 
         public bool TryDeliverResources(Vector3Int cell, int amount)
@@ -47,10 +51,17 @@ namespace TMBS.Core.Pending
             var updated = cellData.WithResourcesAdded(amount);
             pending.UpdateCell(idx, updated);
 
-            if (pending.State == PendingState.WaitingForResources && AllCellsReadyForWork(pending))
+            if (pending.State == PendingState.WaitingForResources)
             {
-                pending.SetState(PendingState.ReadyToBuild);
-                _events?.Publish(new PendingChangedEvent(_instanceId, pending.Id, pending.State));
+                bool canBuild = _resourcePolicy == ResourceRequirement.AllowPartialDelivery
+                    ? (pending.TotalResourceDelivered > 0 || AllCellsReadyForWork(pending))
+                    : AllCellsReadyForWork(pending);
+
+                if (canBuild)
+                {
+                    pending.SetState(PendingState.ReadyToBuild);
+                    _events?.Publish(new PendingChangedEvent(_instanceId, pending.Id, pending.State));
+                }
             }
 
             return true;
@@ -63,13 +74,19 @@ namespace TMBS.Core.Pending
                 return false;
 
             var cellData = pending.Cells[idx];
-            if (cellData.IsCompleted || !cellData.IsReadyForWork)
+            if (cellData.IsCompleted)
                 return false;
 
-            var updated = cellData.WithWorkAdded(amount);
+            int maxAllowed = cellData.WorkAllowed(_resourcePolicy);
+            int availableWork = maxAllowed - cellData.WorkDone;
+            if (availableWork <= 0)
+                return false;
+
+            int actualAmount = Math.Min(amount, availableWork);
+            var updated = cellData.WithWorkAdded(actualAmount);
             pending.UpdateCell(idx, updated);
 
-            if (pending.State == PendingState.ReadyToBuild)
+            if (pending.State == PendingState.ReadyToBuild || pending.State == PendingState.WaitingForResources)
                 pending.SetState(PendingState.InProgress);
 
             _events?.Publish(new PendingChangedEvent(_instanceId, pending.Id, pending.State));
@@ -106,8 +123,13 @@ namespace TMBS.Core.Pending
                         if (_targetTilemap != null)
                             _targetTilemap.SetTile(c.Cell, c.Tile);
 
-                        if (_metadata != null && c.Tile != null)
-                            _metadata.Set(new BuildRecord(c.Tile, c.Cell, BuildState.Completed, c.BuildableData));
+                        if (_metadata != null)
+                        {
+                            if (c.Tile != null)
+                                _metadata.Set(new BuildRecord(c.Tile, c.Cell, BuildState.Completed, c.BuildableData));
+                            else
+                                _metadata.Remove(c.Cell);
+                        }
 
                         _events?.Publish(new RegionModifiedEvent(_instanceId, new BoundsInt(c.Cell, Vector3Int.one)));
                         pending.UpdateCell(i, c.WithCompleted());
@@ -123,8 +145,13 @@ namespace TMBS.Core.Pending
             if (_targetTilemap != null)
                 _targetTilemap.SetTile(cell, cellData.Tile);
 
-            if (_metadata != null && cellData.Tile != null)
-                _metadata.Set(new BuildRecord(cellData.Tile, cell, BuildState.Completed, cellData.BuildableData));
+            if (_metadata != null)
+            {
+                if (cellData.Tile != null)
+                    _metadata.Set(new BuildRecord(cellData.Tile, cell, BuildState.Completed, cellData.BuildableData));
+                else
+                    _metadata.Remove(cell);
+            }
 
             _events?.Publish(new RegionModifiedEvent(_instanceId, new BoundsInt(cell, Vector3Int.one)));
             pending.UpdateCell(idx, cellData.WithCompleted());

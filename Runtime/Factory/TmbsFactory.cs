@@ -73,11 +73,11 @@ namespace TMBS.Runtime.Interface
                     executor = new PendingBuildExecutor(pendingStore, events, pendingConfig);
                     pendingWorkApi = new PendingWorkApi(
                         pendingStore, events, targetTilemap, metadata, instanceId,
-                        pendingConfig.allowPartialCompletion);
+                        pendingConfig.allowPartialCompletion, pendingConfig.resourcePolicy);
 
                     var debugConfig = config.GetPendingDebugConfig();
                     pendingDebugBuilder = debugConfig.enabled
-                        ? new PendingDebugBuilder(pendingWorkApi, debugConfig)
+                        ? new PendingDebugBuilder(pendingWorkApi, debugConfig, pendingConfig.resourcePolicy)
                         : null;
                     break;
                 }

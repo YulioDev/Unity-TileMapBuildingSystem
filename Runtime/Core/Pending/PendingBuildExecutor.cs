@@ -63,9 +63,9 @@ namespace TMBS.Core.Pending
                     cell,
                     ctx.Decision.WriteTile,
                     ctx.BuildableData,
-                    ResolveWorkCost(ctx),
+                    ResolveWorkCost(ctx, cell),
                     0,
-                    ResolveResourceCost(ctx),
+                    ResolveResourceCost(ctx, cell),
                     0);
 
                 var cellBounds = new BoundsInt(cell, Vector3Int.one);
@@ -118,9 +118,9 @@ namespace TMBS.Core.Pending
                     cell,
                     ctx.Decision.WriteTile,
                     ctx.BuildableData,
-                    ResolveWorkCost(ctx),
+                    ResolveWorkCost(ctx, cell),
                     0,
-                    ResolveResourceCost(ctx),
+                    ResolveResourceCost(ctx, cell),
                     0);
             }
 
@@ -136,18 +136,23 @@ namespace TMBS.Core.Pending
                 _events?.Publish(new PendingCreatedEvent(ctx.InstanceId, id, bounds));
         }
 
-        private int ResolveWorkCost(in PipelineContext ctx)
+        private int ResolveWorkCost(in PipelineContext ctx, Vector3Int cell)
         {
-            if (ctx.BuildableData != null)
-                return ctx.BuildableData.workCost;
-            return _config.workCost;
+            var data = ctx.BuildableData;
+            if (data == null) return _config.workCost;
+            return _config.costMode == PendingCostMode.DefinitionProvider
+                ? data.GetWorkCost(cell)
+                : data.workCost;
         }
 
-        private int ResolveResourceCost(in PipelineContext ctx)
+        private int ResolveResourceCost(in PipelineContext ctx, Vector3Int cell)
         {
-            if (ctx.BuildableData != null)
-                return ctx.BuildableData.resourceCost;
-            return _config.resourceCost;
+            if (_config.resourcePolicy == ResourceRequirement.None) return 0;
+            var data = ctx.BuildableData;
+            if (data == null) return _config.resourceCost;
+            return _config.costMode == PendingCostMode.DefinitionProvider
+                ? data.GetResourceCost(cell)
+                : data.resourceCost;
         }
 
         private PendingState ResolveInitialState()

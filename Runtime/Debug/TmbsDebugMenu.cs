@@ -267,6 +267,16 @@ namespace TMBS.Runtime.Debugging
             }
         }
 
+        private ResourceRequirement GetResourcePolicy()
+        {
+            if (buildeableTilemap != null && buildeableTilemap.RootConfig != null)
+            {
+                var cfg = buildeableTilemap.RootConfig.GetPendingConfig();
+                if (cfg != null) return cfg.resourcePolicy;
+            }
+            return ResourceRequirement.None;
+        }
+
         private void TickAutoWorker()
         {
             _tickerTimer += Time.unscaledDeltaTime;
@@ -282,6 +292,8 @@ namespace TMBS.Runtime.Debugging
             var all = workApi.GetAll();
             if (all == null || all.Count == 0) return;
 
+            var policy = GetResourcePolicy();
+
             for (int o = 0; o < all.Count; o++)
             {
                 var order = all[o];
@@ -293,7 +305,9 @@ namespace TMBS.Runtime.Debugging
                     var cell = cells[c];
                     if (cell.IsCompleted) continue;
 
-                    if (_tickerDeliverResources && !cell.IsReadyForWork)
+                    int allowedWork = cell.WorkAllowed(policy);
+
+                    if (_tickerDeliverResources && cell.ResourceDelivered < cell.ResourceRequired && cell.WorkDone >= allowedWork)
                     {
                         int needed = cell.ResourceRequired - cell.ResourceDelivered;
                         int deliver = Mathf.Min(needed, _manualResourceAmount);
@@ -304,13 +318,13 @@ namespace TMBS.Runtime.Debugging
                         }
                     }
 
-                    if (cell.IsReadyForWork && !cell.IsWorkComplete)
+                    if (cell.WorkDone < allowedWork)
                     {
-                        int remainingWork = cell.WorkRequired - cell.WorkDone;
+                        int remainingWork = allowedWork - cell.WorkDone;
                         int workToAdd = Mathf.Min(remainingWork, _manualWorkAmount);
                         workApi.TryAddWork(cell.Cell, workToAdd);
 
-                        if (cell.WorkDone + workToAdd >= cell.WorkRequired)
+                        if (workApi.TryGetCellStatus(cell.Cell, out var updated) && updated.IsWorkComplete)
                         {
                             workApi.TryCompleteCell(cell.Cell);
                         }
@@ -822,19 +836,23 @@ namespace TMBS.Runtime.Debugging
             }
             else
             {
-                if (!cell.IsReadyForWork)
+                var policy = GetResourcePolicy();
+                if (cell.ResourceDelivered < cell.ResourceRequired)
                 {
                     if (GUILayout.Button("+ Recurso", GUILayout.Width(70), GUILayout.Height(18)))
                     {
-                        workApi.TryDeliverResources(cell.Cell, _manualResourceAmount);
+                        int needed = cell.ResourceRequired - cell.ResourceDelivered;
+                        workApi.TryDeliverResources(cell.Cell, Mathf.Min(needed, _manualResourceAmount));
                     }
                 }
-                else if (!cell.IsWorkComplete)
+                if (cell.WorkDone < cell.WorkAllowed(policy))
                 {
                     if (GUILayout.Button("+ Trabajo", GUILayout.Width(70), GUILayout.Height(18)))
                     {
-                        workApi.TryAddWork(cell.Cell, _manualWorkAmount);
-                        if (cell.WorkDone + _manualWorkAmount >= cell.WorkRequired)
+                        int allowed = cell.WorkAllowed(policy) - cell.WorkDone;
+                        int toAdd = Mathf.Min(allowed, _manualWorkAmount);
+                        workApi.TryAddWork(cell.Cell, toAdd);
+                        if (workApi.TryGetCellStatus(cell.Cell, out var updated) && updated.IsWorkComplete)
                         {
                             workApi.TryCompleteCell(cell.Cell);
                         }
@@ -843,7 +861,7 @@ namespace TMBS.Runtime.Debugging
 
                 if (GUILayout.Button("Completar", GUILayout.Width(70), GUILayout.Height(18)))
                 {
-                    if (!cell.IsReadyForWork)
+                    if (cell.ResourceDelivered < cell.ResourceRequired)
                     {
                         workApi.TryDeliverResources(cell.Cell, cell.ResourceRequired - cell.ResourceDelivered);
                     }
@@ -914,6 +932,7 @@ namespace TMBS.Runtime.Debugging
             if (orders == null) return;
 
             var toComplete = new List<Vector3Int>();
+            var policy = GetResourcePolicy();
 
             for (int i = 0; i < orders.Count; i++)
             {
@@ -923,17 +942,20 @@ namespace TMBS.Runtime.Debugging
                 for (int c = 0; c < order.Cells.Length; c++)
                 {
                     var cell = order.Cells[c];
-                    if (!cell.IsCompleted && cell.IsReadyForWork)
+                    if (!cell.IsCompleted)
                     {
-                        if (!cell.IsWorkComplete)
+                        int allowed = cell.WorkAllowed(policy);
+                        if (cell.WorkDone < allowed)
                         {
-                            workApi.TryAddWork(cell.Cell, amount);
-                            if (cell.WorkDone + amount >= cell.WorkRequired)
+                            int rem = allowed - cell.WorkDone;
+                            int toAdd = Mathf.Min(rem, amount);
+                            workApi.TryAddWork(cell.Cell, toAdd);
+                            if (workApi.TryGetCellStatus(cell.Cell, out var updated) && updated.IsWorkComplete)
                             {
                                 toComplete.Add(cell.Cell);
                             }
                         }
-                        else
+                        else if (cell.IsWorkComplete)
                         {
                             toComplete.Add(cell.Cell);
                         }
@@ -964,7 +986,7 @@ namespace TMBS.Runtime.Debugging
                 for (int c = 0; c < order.Cells.Length; c++)
                 {
                     var cell = order.Cells[c];
-                    if (!cell.IsCompleted && !cell.IsReadyForWork)
+                    if (!cell.IsCompleted && cell.ResourceDelivered < cell.ResourceRequired)
                     {
                         int needed = cell.ResourceRequired - cell.ResourceDelivered;
                         if (needed > 0)

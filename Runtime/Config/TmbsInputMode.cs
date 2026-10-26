@@ -5,5 +5,6 @@ namespace TMBS.Runtime.Config
         None = 0,
         Legacy = 1,
         InputActions = 2,
+        ExternalProvided = 3,
     }
 }
