@@ -165,6 +165,45 @@ namespace TMBS.Runtime.Interface
         }
 
         /// <summary>
+        /// Gets the current placement transform (rotation and mirror).
+        /// </summary>
+        public TMBS.Core.Selection.PlacementTransform CurrentTransform =>
+            _tileSelectionState?.Transform ?? default;
+
+        /// <summary>
+        /// Rotates the current selection by 90 degrees clockwise.
+        /// </summary>
+        public void Rotate()
+        {
+            if (_tileSelectionState == null) return;
+            _tileSelectionState.Rotate();
+            _preview?.UpdateTransform(_tileSelectionState.Transform.ToMatrix());
+            _hasLastPreviewIntent = false;
+            PublishSelectionChanged();
+            RefreshPreview();
+        }
+
+        /// <summary>
+        /// Toggles horizontal mirroring for the current selection.
+        /// </summary>
+        public void Mirror()
+        {
+            if (_tileSelectionState == null) return;
+            _tileSelectionState.Mirror();
+            _preview?.UpdateTransform(_tileSelectionState.Transform.ToMatrix());
+            _hasLastPreviewIntent = false;
+            PublishSelectionChanged();
+            RefreshPreview();
+        }
+
+        private void RefreshPreview()
+        {
+            if (_pipeline == null || _preview == null || !_hasLastPreviewIntent || targetTilemap == null) return;
+            var intent = new BuildIntent(BuildIntentType.PointMove, targetTilemap.CellToWorld(_lastPreviewCell), _lastPreviewAlternate);
+            OnBuildIntent(intent);
+        }
+
+        /// <summary>
         /// Switches the execution mode (Immediate vs Pending) at runtime and re-composes the pipeline.
         /// </summary>
         public void SwitchExecutionMode(ExecutionMode newMode)
@@ -428,7 +467,9 @@ namespace TMBS.Runtime.Interface
                 cfg.cancelAction,
                 cfg.undoAction,
                 cfg.redoAction,
-                cfg.alternateModifierAction);
+                cfg.alternateModifierAction,
+                cfg.rotateAction,
+                cfg.mirrorAction);
         }
 #endif
 
@@ -714,10 +755,23 @@ namespace TMBS.Runtime.Interface
             _tileSelectionState.UpdateFromSelection(evt.Selection);
 
             _preview.UpdateTile(evt.Selection.BuildTile);
+            _preview.UpdateTransform(_tileSelectionState.Transform.ToMatrix());
         }
 
         private void OnBuildIntent(BuildIntent intent)
         {
+            if (intent.Type == BuildIntentType.Rotate)
+            {
+                Rotate();
+                return;
+            }
+
+            if (intent.Type == BuildIntentType.Mirror)
+            {
+                Mirror();
+                return;
+            }
+
             if (intent.Type == BuildIntentType.Undo)
             {
                 _pipeline?.CancelActiveOperation();
@@ -783,8 +837,10 @@ namespace TMBS.Runtime.Interface
 
             if (intent.Type != BuildIntentType.Confirm)
             {
-                if (_previewEvaluator.ShouldShowPreview(_activeMode))
+                bool isDragging = intent.Type == BuildIntentType.DragStart || intent.Type == BuildIntentType.DragUpdate;
+                if (_previewEvaluator.ShouldShowPreview(_activeMode, isDragging))
                 {
+                    _preview.UpdateTransform(_tileSelectionState.Transform.ToMatrix());
                     if (ctx.HasDragBounds)
                     {
                         if (ctx.Feedback.HasBlockedCells)

@@ -58,7 +58,8 @@ namespace TMBS.Core.Validation
 
             var fb = markBlockedArea ? new ValidationFeedback(blocked) : default;
 
-            if (allowPartialPlacement && anyIn)
+            bool isBlueprint = ctx.BuildableData != null && ctx.BuildableData.isBlueprint && !ctx.AlternateBehaviour;
+            if (allowPartialPlacement && anyIn && !isBlueprint)
                 return ValidationResult.ValidWith(fb, write);
 
             return ValidationResult.InvalidWith(ValidationFailure.OutOfBounds, fb, write);

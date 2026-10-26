@@ -121,7 +121,14 @@ namespace TMBS.Core.Pending
                     if (!c.IsCompleted)
                     {
                         if (_targetTilemap != null)
+                        {
                             _targetTilemap.SetTile(c.Cell, c.Tile);
+                            if (c.Tile != null)
+                            {
+                                _targetTilemap.SetTileFlags(c.Cell, TileFlags.None);
+                                _targetTilemap.SetTransformMatrix(c.Cell, c.TransformMatrix);
+                            }
+                        }
 
                         if (_metadata != null)
                         {
@@ -143,7 +150,14 @@ namespace TMBS.Core.Pending
             }
 
             if (_targetTilemap != null)
+            {
                 _targetTilemap.SetTile(cell, cellData.Tile);
+                if (cellData.Tile != null)
+                {
+                    _targetTilemap.SetTileFlags(cell, TileFlags.None);
+                    _targetTilemap.SetTransformMatrix(cell, cellData.TransformMatrix);
+                }
+            }
 
             if (_metadata != null)
             {

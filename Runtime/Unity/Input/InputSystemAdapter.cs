@@ -23,6 +23,8 @@ namespace TMBS.Unity.Input
         private readonly InputActionReference _undoRef;
         private readonly InputActionReference _redoRef;
         private readonly InputActionReference _alternateRef;
+        private readonly InputActionReference _rotateRef;
+        private readonly InputActionReference _mirrorRef;
 
         private bool _isActive;
         private bool _isDragging;
@@ -36,7 +38,9 @@ namespace TMBS.Unity.Input
             InputActionReference cancelRef,
             InputActionReference undoRef,
             InputActionReference redoRef,
-            InputActionReference alternateRef)
+            InputActionReference alternateRef,
+            InputActionReference rotateRef = null,
+            InputActionReference mirrorRef = null)
         {
             _cameraProvider = cameraProvider ?? (() => Camera.main);
             _constructionPlaneProvider = constructionPlaneProvider
@@ -48,6 +52,8 @@ namespace TMBS.Unity.Input
             _undoRef = undoRef;
             _redoRef = redoRef;
             _alternateRef = alternateRef;
+            _rotateRef = rotateRef;
+            _mirrorRef = mirrorRef;
         }
 
         public InputCapabilities Capabilities => new InputCapabilities(
@@ -70,6 +76,8 @@ namespace TMBS.Unity.Input
             EnableAction(_undoRef);
             EnableAction(_redoRef);
             EnableAction(_alternateRef);
+            EnableAction(_rotateRef);
+            EnableAction(_mirrorRef);
         }
 
         public void Disable()
@@ -102,6 +110,22 @@ namespace TMBS.Unity.Input
             {
                 BuildIntentRaised?.Invoke(
                     new BuildIntent(BuildIntentType.Redo, mouseWorldPos, false));
+                return;
+            }
+
+            // Rotate
+            if (WasActionPerformed(_rotateRef))
+            {
+                BuildIntentRaised?.Invoke(
+                    new BuildIntent(BuildIntentType.Rotate, mouseWorldPos, false));
+                return;
+            }
+
+            // Mirror
+            if (WasActionPerformed(_mirrorRef))
+            {
+                BuildIntentRaised?.Invoke(
+                    new BuildIntent(BuildIntentType.Mirror, mouseWorldPos, false));
                 return;
             }
 

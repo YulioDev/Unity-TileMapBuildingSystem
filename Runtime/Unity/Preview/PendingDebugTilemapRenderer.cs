@@ -36,6 +36,8 @@ namespace TMBS.Unity.Preview
                 return;
 
             _tilemap.SetTile(cell.Cell, tile);
+            _tilemap.SetTileFlags(cell.Cell, TileFlags.None);
+            _tilemap.SetTransformMatrix(cell.Cell, cell.TransformMatrix);
             _tilemap.SetColor(cell.Cell, ResolveColor(state));
         }
 
@@ -45,6 +47,7 @@ namespace TMBS.Unity.Preview
                 return;
 
             _tilemap.SetTile(cell, null);
+            _tilemap.SetTransformMatrix(cell, Matrix4x4.identity);
             _tilemap.SetColor(cell, Color.white);
         }
 

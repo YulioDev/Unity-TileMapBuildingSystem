@@ -61,7 +61,18 @@ namespace TMBS.Core.Pipeline
                 false,
                 default);
 
-            if (intent.Type == BuildIntentType.DragStart)
+            bool isBlueprint = !intent.AlternateBehaviour &&
+                               _selectionState?.CurrentData != null &&
+                               _selectionState.CurrentData.isBlueprint;
+
+            if (isBlueprint)
+            {
+                var bpSize = _selectionState.Transform.Apply(_selectionState.CurrentData.GetSize());
+                var bpBounds = new BoundsInt(cell, new Vector3Int(bpSize.x, bpSize.y, 1));
+                _ctx.DragBounds = bpBounds;
+                _ctx.HasDragBounds = true;
+            }
+            else if (intent.Type == BuildIntentType.DragStart)
             {
                 _dragStartCell = cell;
                 _hasDragStart = true;
@@ -84,6 +95,7 @@ namespace TMBS.Core.Pipeline
             {
                 _ctx.SelectedTile = _selectionState.CurrentTile;
                 _ctx.BuildableData = _selectionState.CurrentData;
+                _ctx.TransformMatrix = _selectionState.Transform.ToMatrix();
             }
 
             if (_activeMode != null)
@@ -91,7 +103,7 @@ namespace TMBS.Core.Pipeline
                 _activeMode.Interpret(in intent, _ctx);
             }
 
-            if (_clampDragBounds && _ctx.HasDragBounds)
+            if (_clampDragBounds && _ctx.HasDragBounds && !isBlueprint)
             {
                 ApplyBoundsClamp();
             }

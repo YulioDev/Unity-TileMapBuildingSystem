@@ -548,9 +548,20 @@ namespace TMBS.UI
                 activeItemNameText.text = $"Construyendo: {displayName}";
             }
 
+            string transformInfo = "";
+            if (buildeableTilemap != null)
+            {
+                var tr = buildeableTilemap.CurrentTransform;
+                if (tr.Rotation != 0 || tr.Mirrored)
+                {
+                    string mirrorStr = tr.Mirrored ? " | Espejo" : "";
+                    transformInfo = $"  |  {tr.Rotation * 90}°{mirrorStr}";
+                }
+            }
+
             if (activeItemDetailsText != null)
             {
-                activeItemDetailsText.text = $"Categoría: {category}  |  Trabajo: {work}  |  Costo: {res}";
+                activeItemDetailsText.text = $"Categoría: {category}  |  Trabajo: {work}  |  Costo: {res}{transformInfo}";
             }
 
             if (activeItemIcon != null)

@@ -70,7 +70,7 @@ namespace TMBS.Runtime.Interface
                     var pendingConfig = config.GetPendingConfig();
                     pendingStore = new PendingStore();
                     router = new PendingBuildRouter();
-                    executor = new PendingBuildExecutor(pendingStore, events, pendingConfig);
+                    executor = new PendingBuildExecutor(pendingStore, events, pendingConfig, history);
                     pendingWorkApi = new PendingWorkApi(
                         pendingStore, events, targetTilemap, metadata, instanceId,
                         pendingConfig.allowPartialCompletion, pendingConfig.resourcePolicy);

@@ -90,6 +90,18 @@ namespace TMBS.Unity.Input
                 return;
             }
 
+            if (!isCtrl && UnityEngine.Input.GetKeyDown(KeyCode.R))
+            {
+                BuildIntentRaised?.Invoke(new BuildIntent(BuildIntentType.Rotate, mouseWorldPos, false));
+                return;
+            }
+
+            if (!isCtrl && UnityEngine.Input.GetKeyDown(KeyCode.F))
+            {
+                BuildIntentRaised?.Invoke(new BuildIntent(BuildIntentType.Mirror, mouseWorldPos, false));
+                return;
+            }
+
             if (UnityEngine.Input.GetMouseButtonDown(1))
             {
                 if (_isDragging)

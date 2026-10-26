@@ -21,6 +21,7 @@ namespace TMBS.Core.Pipeline
         public BoundsInt DragBounds { get; set; }
         public bool HasDragBounds { get; set; }
         public ValidationFeedback Feedback { get; set; }
+        public Matrix4x4 TransformMatrix { get; set; }
 
         public PipelineContext() { }
 
@@ -51,6 +52,7 @@ namespace TMBS.Core.Pipeline
             DragBounds = dragBounds;
             HasDragBounds = hasDragBounds;
             Feedback = feedback;
+            TransformMatrix = Matrix4x4.identity;
         }
     }
 }

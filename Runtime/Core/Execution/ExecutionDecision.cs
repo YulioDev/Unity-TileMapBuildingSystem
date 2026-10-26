@@ -17,37 +17,41 @@ namespace TMBS.Core.Execution
         public readonly TileBase AlternateWriteTile;
         public readonly CellMask WriteMask;
         public readonly int ConstructionId;
+        public readonly UnityEngine.Matrix4x4 TransformMatrix;
 
         public ExecutionDecision(
             ExecutionResult type,
             TileBase writeTile,
             TileBase alternateWriteTile,
             CellMask writeMask = null,
-            int constructionId = 0)
+            int constructionId = 0,
+            UnityEngine.Matrix4x4 transformMatrix = default)
         {
             Type = type;
             WriteTile = writeTile;
             AlternateWriteTile = alternateWriteTile;
             WriteMask = writeMask;
             ConstructionId = constructionId;
+            TransformMatrix = transformMatrix == default ? UnityEngine.Matrix4x4.identity : transformMatrix;
         }
 
         public static ExecutionDecision Reject =>
             new ExecutionDecision(ExecutionResult.Reject, null, null, null, 0);
 
-        public static ExecutionDecision Immediate(TileBase tile, CellMask writeMask = null) =>
-            new ExecutionDecision(ExecutionResult.ImmediatePlace, tile, null, writeMask, 1);
+        public static ExecutionDecision Immediate(TileBase tile, CellMask writeMask = null, UnityEngine.Matrix4x4 transformMatrix = default) =>
+            new ExecutionDecision(ExecutionResult.ImmediatePlace, tile, null, writeMask, 1, transformMatrix);
 
         public static ExecutionDecision ImmediateWithAlternate(
             TileBase tile,
             TileBase alternateTile,
-            CellMask writeMask = null) =>
-            new ExecutionDecision(ExecutionResult.ImmediatePlace, tile, alternateTile, writeMask, 1);
+            CellMask writeMask = null,
+            UnityEngine.Matrix4x4 transformMatrix = default) =>
+            new ExecutionDecision(ExecutionResult.ImmediatePlace, tile, alternateTile, writeMask, 1, transformMatrix);
 
-        public static ExecutionDecision Pending(TileBase tile, CellMask writeMask = null) =>
-            new ExecutionDecision(ExecutionResult.PendingOrder, tile, null, writeMask, 1);
+        public static ExecutionDecision Pending(TileBase tile, CellMask writeMask = null, UnityEngine.Matrix4x4 transformMatrix = default) =>
+            new ExecutionDecision(ExecutionResult.PendingOrder, tile, null, writeMask, 1, transformMatrix);
 
         public ExecutionDecision WithWriteMask(CellMask mask) =>
-            new ExecutionDecision(Type, WriteTile, AlternateWriteTile, mask, ConstructionId);
+            new ExecutionDecision(Type, WriteTile, AlternateWriteTile, mask, ConstructionId, TransformMatrix);
     }
 }

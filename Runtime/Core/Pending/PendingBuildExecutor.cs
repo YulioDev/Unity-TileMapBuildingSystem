@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using TMBS.Core.Events;
 using TMBS.Core.Execution;
+using TMBS.Core.History;
 using TMBS.Core.Pipeline;
 using TMBS.Runtime.Config;
 using UnityEngine;
@@ -13,15 +15,18 @@ namespace TMBS.Core.Pending
         private readonly IPendingStore _store;
         private readonly IEventBus _events;
         private readonly TmbsPendingConfig _config;
+        private readonly IUndoRedoHistory _history;
 
         public PendingBuildExecutor(
             IPendingStore store,
             IEventBus events,
-            TmbsPendingConfig config)
+            TmbsPendingConfig config,
+            IUndoRedoHistory history = null)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _events = events;
             _config = config ?? new TmbsPendingConfig();
+            _history = history;
         }
 
         public void Execute(in PipelineContext ctx, Tilemap targetTilemap)
@@ -38,26 +43,45 @@ namespace TMBS.Core.Pending
             if (!writeMask.AnyTrue())
                 return;
 
-            if (_config.groupingMode == PendingGroupingMode.CellBlocks)
-                CreateBlockPending(ctx, bounds, writeMask);
+            bool isBlueprint = ctx.BuildableData != null && ctx.BuildableData.isBlueprint;
+            List<(BoundsInt bounds, PendingCell[] cells, PendingState initialState)> orderDefs;
+
+            if (isBlueprint || _config.groupingMode == PendingGroupingMode.CellBlocks)
+                orderDefs = BuildBlockPendingOrders(ctx, bounds, writeMask);
             else
-                CreateIndividualPendings(ctx, writeMask);
+                orderDefs = BuildIndividualPendingOrders(ctx, writeMask);
+
+            if (orderDefs == null || orderDefs.Count == 0)
+                return;
+
+            var command = new PendingOrderCommand(
+                _store,
+                _events,
+                ctx.InstanceId,
+                orderDefs,
+                _config.emitPendingEvents,
+                _config.replaceExistingPending);
+
+            if (_history != null)
+            {
+                _history.Push(command);
+            }
+            else
+            {
+                command.Execute();
+            }
         }
 
-        private void CreateIndividualPendings(in PipelineContext ctx, TMBS.Core.Validation.CellMask writeMask)
+        private List<(BoundsInt bounds, PendingCell[] cells, PendingState initialState)> BuildIndividualPendingOrders(
+            in PipelineContext ctx, TMBS.Core.Validation.CellMask writeMask)
         {
+            var list = new List<(BoundsInt bounds, PendingCell[] cells, PendingState initialState)>();
+            var initialState = ResolveInitialState();
+
             for (int i = 0; i < writeMask.Length; i++)
             {
                 if (!writeMask.Bits[i]) continue;
-
                 var cell = writeMask.CellAt(i);
-
-                if (_store.TryGetByCell(cell, out var existing, out _))
-                {
-                    if (!_config.replaceExistingPending)
-                        continue;
-                    _store.Remove(existing.Id);
-                }
 
                 var cellData = new PendingCell(
                     cell,
@@ -66,45 +90,25 @@ namespace TMBS.Core.Pending
                     ResolveWorkCost(ctx, cell),
                     0,
                     ResolveResourceCost(ctx, cell),
-                    0);
+                    0,
+                    false,
+                    ctx.Decision.TransformMatrix);
 
                 var cellBounds = new BoundsInt(cell, Vector3Int.one);
-
-                var pending = new PendingOrder(
-                    ctx.InstanceId,
-                    cellBounds,
-                    new[] { cellData },
-                    ResolveInitialState());
-
-                int id = _store.Add(pending);
-
-                if (_config.emitPendingEvents)
-                    _events?.Publish(new PendingCreatedEvent(ctx.InstanceId, id, cellBounds));
+                list.Add((cellBounds, new[] { cellData }, initialState));
             }
+
+            return list;
         }
 
-        private void CreateBlockPending(in PipelineContext ctx, BoundsInt bounds, TMBS.Core.Validation.CellMask writeMask)
+        private List<(BoundsInt bounds, PendingCell[] cells, PendingState initialState)> BuildBlockPendingOrders(
+            in PipelineContext ctx, BoundsInt bounds, TMBS.Core.Validation.CellMask writeMask)
         {
             int count = 0;
             for (int i = 0; i < writeMask.Length; i++)
                 if (writeMask.Bits[i]) count++;
 
-            if (count == 0) return;
-
-            for (int i = 0; i < writeMask.Length; i++)
-            {
-                if (!writeMask.Bits[i]) continue;
-
-                var cell = writeMask.CellAt(i);
-
-                if (_store.TryGetByCell(cell, out var existing, out _))
-                {
-                    if (!_config.replaceExistingPending)
-                        return;
-
-                    _store.Remove(existing.Id);
-                }
-            }
+            if (count == 0) return null;
 
             var cells = new PendingCell[count];
             int w = 0;
@@ -121,19 +125,15 @@ namespace TMBS.Core.Pending
                     ResolveWorkCost(ctx, cell),
                     0,
                     ResolveResourceCost(ctx, cell),
-                    0);
+                    0,
+                    false,
+                    ctx.Decision.TransformMatrix);
             }
 
-            var pending = new PendingOrder(
-                ctx.InstanceId,
-                bounds,
-                cells,
-                ResolveInitialState());
-
-            int id = _store.Add(pending);
-
-            if (_config.emitPendingEvents)
-                _events?.Publish(new PendingCreatedEvent(ctx.InstanceId, id, bounds));
+            return new List<(BoundsInt bounds, PendingCell[] cells, PendingState initialState)>
+            {
+                (bounds, cells, ResolveInitialState())
+            };
         }
 
         private int ResolveWorkCost(in PipelineContext ctx, Vector3Int cell)

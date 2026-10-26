@@ -11,7 +11,9 @@ namespace TMBS.Core.Intents
         Confirm,
         Cancel,
         Undo,
-        Redo
+        Redo,
+        Rotate,
+        Mirror
     }
 
     public readonly struct BuildIntent

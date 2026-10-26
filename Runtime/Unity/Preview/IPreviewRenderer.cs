@@ -11,5 +11,6 @@ namespace TMBS.Unity.Preview
         void ShowRectMasked(BoundsInt fullArea, CellMask blockedMask);
         void Hide();
         void UpdateTile(TileBase tile);
+        void UpdateTransform(Matrix4x4 matrix);
     }
 }

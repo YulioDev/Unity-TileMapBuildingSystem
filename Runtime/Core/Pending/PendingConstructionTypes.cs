@@ -24,6 +24,7 @@ namespace TMBS.Core.Pending
         public readonly int ResourceRequired;
         public readonly int ResourceDelivered;
         public readonly bool IsCompleted;
+        public readonly Matrix4x4 TransformMatrix;
 
         public bool IsReadyForWork =>
             ResourceRequired == 0 || ResourceDelivered >= ResourceRequired;
@@ -45,7 +46,7 @@ namespace TMBS.Core.Pending
             int workDone,
             int resourceRequired,
             int resourceDelivered)
-            : this(cell, tile, null, workRequired, workDone, resourceRequired, resourceDelivered, false)
+            : this(cell, tile, null, workRequired, workDone, resourceRequired, resourceDelivered, false, Matrix4x4.identity)
         {
         }
 
@@ -57,7 +58,7 @@ namespace TMBS.Core.Pending
             int workDone,
             int resourceRequired,
             int resourceDelivered)
-            : this(cell, tile, buildableData, workRequired, workDone, resourceRequired, resourceDelivered, false)
+            : this(cell, tile, buildableData, workRequired, workDone, resourceRequired, resourceDelivered, false, Matrix4x4.identity)
         {
         }
 
@@ -70,6 +71,20 @@ namespace TMBS.Core.Pending
             int resourceRequired,
             int resourceDelivered,
             bool isCompleted)
+            : this(cell, tile, buildableData, workRequired, workDone, resourceRequired, resourceDelivered, isCompleted, Matrix4x4.identity)
+        {
+        }
+
+        public PendingCell(
+            Vector3Int cell,
+            TileBase tile,
+            TmbsBuildableData buildableData,
+            int workRequired,
+            int workDone,
+            int resourceRequired,
+            int resourceDelivered,
+            bool isCompleted,
+            Matrix4x4 transformMatrix)
         {
             Cell = cell;
             Tile = tile;
@@ -79,6 +94,7 @@ namespace TMBS.Core.Pending
             ResourceRequired = resourceRequired;
             ResourceDelivered = resourceDelivered;
             IsCompleted = isCompleted;
+            TransformMatrix = transformMatrix == default ? Matrix4x4.identity : transformMatrix;
         }
 
         public PendingCell WithWorkAdded(int amount) =>
@@ -87,7 +103,7 @@ namespace TMBS.Core.Pending
                 WorkRequired,
                 Math.Min(WorkDone + amount, WorkRequired),
                 ResourceRequired, ResourceDelivered,
-                IsCompleted);
+                IsCompleted, TransformMatrix);
 
         public PendingCell WithResourcesAdded(int amount) =>
             new PendingCell(
@@ -95,13 +111,13 @@ namespace TMBS.Core.Pending
                 WorkRequired, WorkDone,
                 ResourceRequired,
                 Math.Min(ResourceDelivered + amount, ResourceRequired),
-                IsCompleted);
+                IsCompleted, TransformMatrix);
 
         public PendingCell WithCompleted() =>
             new PendingCell(
                 Cell, Tile, BuildableData,
                 WorkRequired, WorkDone,
                 ResourceRequired, ResourceDelivered,
-                true);
+                true, TransformMatrix);
     }
 }

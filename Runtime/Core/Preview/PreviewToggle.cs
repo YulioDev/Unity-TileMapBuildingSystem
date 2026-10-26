@@ -11,7 +11,7 @@ namespace TMBS.Core.Preview
             _policy = policy;
         }
 
-        public bool ShouldShowPreview(IBuildMode mode)
+        public bool ShouldShowPreview(IBuildMode mode, bool isDragging = false)
         {
             switch (_policy)
             {
@@ -20,7 +20,7 @@ namespace TMBS.Core.Preview
                 case PreviewPolicy.StrictOff:
                     return false;
                 case PreviewPolicy.SoftOff:
-                    return mode != null && mode.RequiresPreview;
+                    return isDragging || (mode != null && mode.RequiresPreview);
                 default:
                     return true;
             }

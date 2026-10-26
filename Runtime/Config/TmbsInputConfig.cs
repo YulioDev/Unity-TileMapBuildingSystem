@@ -35,6 +35,12 @@ namespace TMBS.Runtime.Config
 
         [Tooltip("Button held to activate alternate behaviour (e.g. erase instead of place).")]
         public InputActionReference alternateModifierAction;
+
+        [Tooltip("Button action for Rotate.")]
+        public InputActionReference rotateAction;
+
+        [Tooltip("Button action for Mirror.")]
+        public InputActionReference mirrorAction;
 #endif
 
         // ── Capability validation ──

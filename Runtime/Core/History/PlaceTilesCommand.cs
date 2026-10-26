@@ -64,6 +64,14 @@ namespace TMBS.Core.History
                     }
                 }
 
+                for (int i = 0; i < _changes.Length; i++)
+                {
+                    var change = _changes[i];
+                    var mat = useAfter ? change.AfterMatrix : change.BeforeMatrix;
+                    _tilemap.SetTileFlags(change.Cell, TileFlags.None);
+                    _tilemap.SetTransformMatrix(change.Cell, mat);
+                }
+
                 _onRegionModified?.Invoke(_bounds);
                 return;
             }
@@ -91,6 +99,14 @@ namespace TMBS.Core.History
                     else
                         _metadata.Set(meta.Value);
                 }
+            }
+
+            for (int i = 0; i < _changes.Length; i++)
+            {
+                var change = _changes[i];
+                var mat = useAfter ? change.AfterMatrix : change.BeforeMatrix;
+                _tilemap.SetTileFlags(change.Cell, TileFlags.None);
+                _tilemap.SetTransformMatrix(change.Cell, mat);
             }
 
             _onRegionModified?.Invoke(_bounds);

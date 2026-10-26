@@ -24,7 +24,8 @@ namespace TMBS.Core.Execution
                 ctx.SelectedTile,
                 null,
                 mask,
-                1);
+                1,
+                ctx.TransformMatrix);
         }
     }
 }

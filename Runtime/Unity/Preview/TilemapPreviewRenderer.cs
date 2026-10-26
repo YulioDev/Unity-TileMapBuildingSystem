@@ -14,6 +14,8 @@ namespace TMBS.Unity.Preview
         private BoundsInt _last;
         private bool _hasLast;
         private bool _lastValid;
+        private Matrix4x4 _transformMatrix = Matrix4x4.identity;
+        private Matrix4x4 _lastMatrix = Matrix4x4.identity;
 
         private TileBase[] _buffer;
 
@@ -31,6 +33,11 @@ namespace TMBS.Unity.Preview
         {
             Hide();
             _tile = tile;
+        }
+
+        public void UpdateTransform(Matrix4x4 matrix)
+        {
+            _transformMatrix = matrix;
         }
 
         public void ShowCell(Vector3Int cell, bool valid)
@@ -55,30 +62,27 @@ namespace TMBS.Unity.Preview
             FillArray(_buffer, len, _tile);
             _tilemap.SetTilesBlock(fullArea, _buffer);
 
-            // Apply per-cell color overlay
-            if (blockedMask == null || !blockedMask.AnyTrue())
-            {
-                ApplyColorToArea(fullArea, _validColor);
-            }
-            else
-            {
-                bool sameBounds =
-                    blockedMask.Bounds.position == fullArea.position &&
-                    blockedMask.Bounds.size == fullArea.size;
+            // Apply per-cell transform and color overlay
+            bool sameBounds = blockedMask != null &&
+                blockedMask.Bounds.position == fullArea.position &&
+                blockedMask.Bounds.size == fullArea.size;
 
-                for (int i = 0; i < len; i++)
-                {
-                    Vector3Int pos = CellAt(fullArea, i);
-                    bool isBlocked = sameBounds
-                        ? blockedMask.Bits[i]
-                        : (blockedMask.Contains(pos) && blockedMask.Bits[blockedMask.IndexOf(pos)]);
+            for (int i = 0; i < len; i++)
+            {
+                Vector3Int pos = CellAt(fullArea, i);
+                _tilemap.SetTileFlags(pos, TileFlags.None);
+                _tilemap.SetTransformMatrix(pos, _transformMatrix);
 
-                    _tilemap.SetColor(pos, isBlocked ? _invalidColor : _validColor);
-                }
+                bool isBlocked = blockedMask != null && (sameBounds
+                    ? blockedMask.Bits[i]
+                    : (blockedMask.Contains(pos) && blockedMask.Bits[blockedMask.IndexOf(pos)]));
+
+                _tilemap.SetColor(pos, isBlocked ? _invalidColor : _validColor);
             }
 
             _last = fullArea;
             _hasLast = true;
+            _lastMatrix = _transformMatrix;
         }
 
         public void Hide()
@@ -98,7 +102,7 @@ namespace TMBS.Unity.Preview
         {
             if (_tile == null) return;
 
-            if (_hasLast && SameBounds(_last, next) && _lastValid == valid)
+            if (_hasLast && SameBounds(_last, next) && _lastValid == valid && _lastMatrix == _transformMatrix)
                 return;
 
             ClearPrevious();
@@ -108,17 +112,20 @@ namespace TMBS.Unity.Preview
             FillArray(_buffer, len, _tile);
 
             _tilemap.SetTilesBlock(next, _buffer);
-            ApplyColorToArea(next, valid ? _validColor : _invalidColor);
+            ApplyTransformAndColorToArea(next, valid ? _validColor : _invalidColor);
 
             _last = next;
             _hasLast = true;
             _lastValid = valid;
+            _lastMatrix = _transformMatrix;
         }
 
-        private void ApplyColorToArea(BoundsInt area, Color color)
+        private void ApplyTransformAndColorToArea(BoundsInt area, Color color)
         {
             foreach (var pos in area.allPositionsWithin)
             {
+                _tilemap.SetTileFlags(pos, TileFlags.None);
+                _tilemap.SetTransformMatrix(pos, _transformMatrix);
                 _tilemap.SetColor(pos, color);
             }
         }

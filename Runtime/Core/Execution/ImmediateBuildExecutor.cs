@@ -75,7 +75,9 @@ namespace TMBS.Core.Execution
                         {
                             int blockIndex = TMBS.Core.Grid.TileBlockIndex.IndexOf(bounds, cell);
                             var beforeTile = beforeTiles[blockIndex];
+                            var beforeMatrix = targetTilemap.GetTransformMatrix(cell);
                             var afterTile = ctx.AlternateBehaviour ? ctx.Decision.AlternateWriteTile : ctx.Decision.WriteTile;
+                            var afterMatrix = ctx.AlternateBehaviour ? Matrix4x4.identity : ctx.Decision.TransformMatrix;
 
                             BuildRecord? beforeMeta = null;
                             if (_metadata != null && _metadata.TryGet(cell, out var record))
@@ -93,7 +95,7 @@ namespace TMBS.Core.Execution
                                     ctx.BuildableData);
                             }
 
-                            changes[changeIndex++] = new TileChange(cell, beforeTile, afterTile, beforeMeta, afterMeta);
+                            changes[changeIndex++] = new TileChange(cell, beforeTile, afterTile, beforeMeta, afterMeta, beforeMatrix, afterMatrix);
                         }
                     }
                 }
