@@ -4,6 +4,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 using TMBS.Runtime.Config;
+using TMBS.UI;
 
 public class TmbsBuildableGalleryWindow : EditorWindow
 {
@@ -146,7 +147,7 @@ public class TmbsBuildableGalleryWindow : EditorWindow
         EditorGUI.DrawRect(cardRect, bgColor);
 
         // Sprite preview
-        var sprite = ResolveSprite(data);
+        var sprite = TmbsPaletteSlot.ResolveSprite(data, data.tile);
         if (sprite != null && sprite.texture != null)
         {
             var tex = sprite.texture;
@@ -204,16 +205,5 @@ public class TmbsBuildableGalleryWindow : EditorWindow
         AssetDatabase.SaveAssets();
         Selection.activeObject = asset;
         RefreshDatabase();
-    }
-
-    private static Sprite ResolveSprite(TmbsBuildableData data)
-    {
-        if (data.previewSprite != null)
-            return data.previewSprite;
-
-        if (data.tile is Tile unityTile)
-            return unityTile.sprite;
-
-        return null;
     }
 }

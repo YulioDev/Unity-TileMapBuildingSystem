@@ -789,7 +789,7 @@ namespace TMBS.UI
             {
                 var path = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
                 var asset = UnityEditor.AssetDatabase.LoadAssetAtPath<TmbsBuildableData>(path);
-                if (asset != null && (asset.tile != null || asset.isBlueprint) && !buildables.Contains(asset))
+                if (asset != null && asset.tile != null && !buildables.Contains(asset))
                 {
                     buildables.Add(asset);
                 }
@@ -800,7 +800,7 @@ namespace TMBS.UI
             {
                 foreach (var asset in loaded)
                 {
-                    if (asset != null && (asset.tile != null || asset.isBlueprint) && !buildables.Contains(asset))
+                    if (asset != null && asset.tile != null && !buildables.Contains(asset))
                     {
                         buildables.Add(asset);
                     }

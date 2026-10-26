@@ -193,6 +193,10 @@ public class TmbsRootConfigEditor : Editor
             case TmbsInputMode.InputActions:
                 DrawInputActionsFields(inputProp);
                 break;
+
+            case TmbsInputMode.ExternalProvided:
+                DrawExternalProvidedFields();
+                break;
         }
 
         EditorGUILayout.Space(4);
@@ -227,6 +231,15 @@ public class TmbsRootConfigEditor : Editor
         EditorGUI.indentLevel--;
     }
 
+    private void DrawExternalProvidedFields()
+    {
+        EditorGUI.indentLevel++;
+        EditorGUILayout.HelpBox(
+            "ExternalProvided: Llama a SetExternalInputAdapter o SetExternalInputProvider antes de OnEnable.",
+            MessageType.Info);
+        EditorGUI.indentLevel--;
+    }
+
     private void DrawInputActionsFields(SerializedProperty inputProp)
     {
         EditorGUI.indentLevel++;
@@ -239,11 +252,14 @@ public class TmbsRootConfigEditor : Editor
         DrawActionField(inputProp, "undoAction", "Undo (Button)");
         DrawActionField(inputProp, "redoAction", "Redo (Button)");
         DrawActionField(inputProp, "alternateModifierAction", "Alternate Modifier (Button)");
+        DrawActionField(inputProp, "rotateAction", "Rotate (Button)");
+        DrawActionField(inputProp, "mirrorAction", "Mirror (Button)");
 
         EditorGUILayout.HelpBox(
             "Assign InputActionReferences from your Input Action Asset.\n" +
             "The 'Drag / Place' action drives the full drag lifecycle (start \u2192 update \u2192 end \u2192 confirm).\n" +
-            "The 'Alternate Modifier' (e.g. Shift) toggles erase behaviour.",
+            "The 'Alternate Modifier' (e.g. Shift) toggles erase behaviour.\n" +
+            "The 'Rotate' and 'Mirror' actions rotate (90 deg) and mirror the current placement.",
             MessageType.Info);
 #else
         EditorGUILayout.HelpBox(

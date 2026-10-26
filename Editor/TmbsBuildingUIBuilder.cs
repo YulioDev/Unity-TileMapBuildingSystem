@@ -175,7 +175,7 @@ namespace TMBS.Editor
             {
                 var path = AssetDatabase.GUIDToAssetPath(guid);
                 var asset = AssetDatabase.LoadAssetAtPath<TmbsBuildableData>(path);
-                if (asset != null && (asset.tile != null || asset.isBlueprint) && !foundBuildables.Contains(asset))
+                if (asset != null && asset.tile != null && !foundBuildables.Contains(asset))
                 {
                     foundBuildables.Add(asset);
                 }

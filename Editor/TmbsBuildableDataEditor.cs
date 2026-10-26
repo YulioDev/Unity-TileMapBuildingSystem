@@ -2,6 +2,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 using TMBS.Runtime.Config;
+using TMBS.UI;
 
 [CustomEditor(typeof(TmbsBuildableData))]
 public class TmbsBuildableDataEditor : Editor
@@ -19,15 +20,34 @@ public class TmbsBuildableDataEditor : Editor
 
         EditorGUILayout.Space();
 
-        // Draw all default properties except m_Script
-        DrawPropertiesExcluding(serializedObject, "m_Script");
+        var isBlueprintProp = serializedObject.FindProperty("isBlueprint");
+        var tileProp = serializedObject.FindProperty("tile");
+
+        bool isBlueprint = isBlueprintProp != null && isBlueprintProp.boolValue;
+        bool hasTile = tileProp != null && tileProp.objectReferenceValue != null;
+
+        if (isBlueprint && !hasTile)
+        {
+            EditorGUILayout.HelpBox(
+                "Blueprints require a Tile to be assigned.",
+                MessageType.Warning);
+        }
+
+        if (isBlueprint)
+        {
+            DrawPropertiesExcluding(serializedObject, "m_Script");
+        }
+        else
+        {
+            DrawPropertiesExcluding(serializedObject, "m_Script", "footprintSize");
+        }
 
         serializedObject.ApplyModifiedProperties();
     }
 
     private void DrawTilePreview(TmbsBuildableData data)
     {
-        Sprite sprite = ResolvePreviewSprite(data);
+        Sprite sprite = TmbsPaletteSlot.ResolveSprite(data, data.tile);
 
         if (sprite == null)
         {
@@ -68,23 +88,12 @@ public class TmbsBuildableDataEditor : Editor
             EditorStyles.centeredGreyMiniLabel);
     }
 
-    private static Sprite ResolvePreviewSprite(TmbsBuildableData data)
-    {
-        if (data.previewSprite != null)
-            return data.previewSprite;
-
-        if (data.tile is Tile unityTile)
-            return unityTile.sprite;
-
-        return null;
-    }
-
     public override bool HasPreviewGUI() => true;
 
     public override void OnPreviewGUI(Rect r, GUIStyle background)
     {
         var data = (TmbsBuildableData)target;
-        var sprite = ResolvePreviewSprite(data);
+        var sprite = TmbsPaletteSlot.ResolveSprite(data, data.tile);
         if (sprite == null) return;
 
         var tex = sprite.texture;
