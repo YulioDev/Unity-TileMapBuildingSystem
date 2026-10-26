@@ -60,10 +60,10 @@ namespace TMBS.Core.Pending
                 if (canBuild)
                 {
                     pending.SetState(PendingState.ReadyToBuild);
-                    _events?.Publish(new PendingChangedEvent(_instanceId, pending.Id, pending.State));
                 }
             }
 
+            _events?.Publish(new PendingChangedEvent(_instanceId, pending.Id, pending.State));
             return true;
         }
 
@@ -128,6 +128,10 @@ namespace TMBS.Core.Pending
                                 _targetTilemap.SetTileFlags(c.Cell, TileFlags.None);
                                 _targetTilemap.SetTransformMatrix(c.Cell, c.TransformMatrix);
                             }
+                            else
+                            {
+                                _targetTilemap.SetTransformMatrix(c.Cell, Matrix4x4.identity);
+                            }
                         }
 
                         if (_metadata != null)
@@ -156,6 +160,10 @@ namespace TMBS.Core.Pending
                 {
                     _targetTilemap.SetTileFlags(cell, TileFlags.None);
                     _targetTilemap.SetTransformMatrix(cell, cellData.TransformMatrix);
+                }
+                else
+                {
+                    _targetTilemap.SetTransformMatrix(cell, Matrix4x4.identity);
                 }
             }
 

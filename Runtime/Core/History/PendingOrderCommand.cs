@@ -69,7 +69,14 @@ namespace TMBS.Core.History
                     {
                         if (_store.TryGetByCell(cells[c].Cell, out var existing, out _))
                         {
+                            var existingBounds = existing.Bounds;
+                            existing.SetState(PendingState.Cancelled);
                             _store.Remove(existing.Id);
+                            if (_emitEvents)
+                            {
+                                _events?.Publish(new PendingChangedEvent(_instanceId, existing.Id, PendingState.Cancelled));
+                                _events?.Publish(new PendingCompletedEvent(_instanceId, existing.Id, existingBounds));
+                            }
                         }
                     }
                 }

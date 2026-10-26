@@ -82,6 +82,7 @@ namespace TMBS.Runtime.Interface
         public void SetBuildable(BuildableDef descriptor)
         {
             currentBuildable = descriptor;
+            _tileSelectionState?.ResetTransform();
             PublishSelectionChanged();
         }
 
@@ -120,6 +121,7 @@ namespace TMBS.Runtime.Interface
         {
             _pipeline?.CancelActiveOperation();
             currentBuildable = null;
+            _tileSelectionState?.ResetTransform();
             _preview?.Hide();
             if (_events != null)
             {
@@ -178,7 +180,6 @@ namespace TMBS.Runtime.Interface
             if (_tileSelectionState == null) return;
             _tileSelectionState.Rotate();
             _preview?.UpdateTransform(_tileSelectionState.Transform.ToMatrix());
-            _hasLastPreviewIntent = false;
             PublishSelectionChanged();
             RefreshPreview();
         }
@@ -191,7 +192,6 @@ namespace TMBS.Runtime.Interface
             if (_tileSelectionState == null) return;
             _tileSelectionState.Mirror();
             _preview?.UpdateTransform(_tileSelectionState.Transform.ToMatrix());
-            _hasLastPreviewIntent = false;
             PublishSelectionChanged();
             RefreshPreview();
         }
@@ -199,7 +199,10 @@ namespace TMBS.Runtime.Interface
         private void RefreshPreview()
         {
             if (_pipeline == null || _preview == null || !_hasLastPreviewIntent || targetTilemap == null) return;
-            var intent = new BuildIntent(BuildIntentType.PointMove, targetTilemap.CellToWorld(_lastPreviewCell), _lastPreviewAlternate);
+            var cell = _lastPreviewCell;
+            var alternate = _lastPreviewAlternate;
+            _hasLastPreviewIntent = false;
+            var intent = new BuildIntent(BuildIntentType.PointMove, targetTilemap.CellToWorld(cell), alternate);
             OnBuildIntent(intent);
         }
 

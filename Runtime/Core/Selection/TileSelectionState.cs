@@ -12,12 +12,17 @@ namespace TMBS.Core.Selection
 
         public void Rotate() => Transform = new PlacementTransform((Transform.Rotation + 1) % 4, Transform.Mirrored);
         public void Mirror() => Transform = new PlacementTransform(Transform.Rotation, !Transform.Mirrored);
+        public void ResetTransform() => Transform = default;
 
         public void UpdateFromSelection(BuildSelectionData data)
         {
+            bool selectionChanged = CurrentTile != data.BuildTile || CurrentData != data.BuildableData;
             CurrentTile = data.BuildTile;
             CurrentData = data.BuildableData;
-            Transform = default;
+            if (selectionChanged)
+            {
+                Transform = default;
+            }
         }
     }
 }

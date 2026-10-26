@@ -92,8 +92,12 @@ namespace TMBS.Core.Pending
 
                 if (_config.autoDeliverResources && cell.ResourceDelivered < cell.ResourceRequired)
                 {
-                    int needed = cell.ResourceRequired - cell.ResourceDelivered;
-                    _workApi.TryDeliverResources(cell.Cell, needed);
+                    int remainingNeeded = cell.ResourceRequired - cell.ResourceDelivered;
+                    int toDeliver = _policy == ResourceRequirement.AllowPartialDelivery
+                        ? Mathf.Min(remainingNeeded, Mathf.Max(1, _config.workPerStep))
+                        : remainingNeeded;
+
+                    _workApi.TryDeliverResources(cell.Cell, toDeliver);
                     return true;
                 }
             }

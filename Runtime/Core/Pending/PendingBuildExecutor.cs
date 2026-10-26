@@ -76,12 +76,12 @@ namespace TMBS.Core.Pending
             in PipelineContext ctx, TMBS.Core.Validation.CellMask writeMask)
         {
             var list = new List<(BoundsInt bounds, PendingCell[] cells, PendingState initialState)>();
-            var initialState = ResolveInitialState();
 
             for (int i = 0; i < writeMask.Length; i++)
             {
                 if (!writeMask.Bits[i]) continue;
                 var cell = writeMask.CellAt(i);
+                int resCost = ResolveResourceCost(ctx, cell);
 
                 var cellData = new PendingCell(
                     cell,
@@ -89,13 +89,13 @@ namespace TMBS.Core.Pending
                     ctx.BuildableData,
                     ResolveWorkCost(ctx, cell),
                     0,
-                    ResolveResourceCost(ctx, cell),
+                    resCost,
                     0,
                     false,
                     ctx.Decision.TransformMatrix);
 
                 var cellBounds = new BoundsInt(cell, Vector3Int.one);
-                list.Add((cellBounds, new[] { cellData }, initialState));
+                list.Add((cellBounds, new[] { cellData }, ResolveInitialState(resCost)));
             }
 
             return list;
@@ -112,11 +112,14 @@ namespace TMBS.Core.Pending
 
             var cells = new PendingCell[count];
             int w = 0;
+            int totalResCost = 0;
 
             for (int i = 0; i < writeMask.Length; i++)
             {
                 if (!writeMask.Bits[i]) continue;
                 var cell = writeMask.CellAt(i);
+                int resCost = ResolveResourceCost(ctx, cell);
+                totalResCost += resCost;
 
                 cells[w++] = new PendingCell(
                     cell,
@@ -124,7 +127,7 @@ namespace TMBS.Core.Pending
                     ctx.BuildableData,
                     ResolveWorkCost(ctx, cell),
                     0,
-                    ResolveResourceCost(ctx, cell),
+                    resCost,
                     0,
                     false,
                     ctx.Decision.TransformMatrix);
@@ -132,7 +135,7 @@ namespace TMBS.Core.Pending
 
             return new List<(BoundsInt bounds, PendingCell[] cells, PendingState initialState)>
             {
-                (bounds, cells, ResolveInitialState())
+                (bounds, cells, ResolveInitialState(totalResCost))
             };
         }
 
@@ -155,8 +158,9 @@ namespace TMBS.Core.Pending
                 : data.resourceCost;
         }
 
-        private PendingState ResolveInitialState()
+        private PendingState ResolveInitialState(int resourceCost = 1)
         {
+            if (resourceCost <= 0) return PendingState.ReadyToBuild;
             switch (_config.resourcePolicy)
             {
                 case ResourceRequirement.RequiredBeforeWork:
