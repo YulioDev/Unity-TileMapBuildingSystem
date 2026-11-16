@@ -92,23 +92,26 @@ namespace TMBS.Editor
             // Active Item Name
             var nameText = CreateText("ActiveItemName", topPanel.transform, "Building: None",
                 13, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white,
-                new Vector2(0.045f, 0.1f), new Vector2(0.35f, 0.5f), Vector2.zero, defaultFont);
+                new Vector2(0.045f, 0.1f), new Vector2(0.28f, 0.5f), Vector2.zero, defaultFont);
 
             // Active Item Details
             var detailsText = CreateText("ActiveItemDetails", topPanel.transform, "Select a buildable from the palette below",
                 12, FontStyle.Italic, TextAnchor.MiddleLeft, new Color(0.75f, 0.8f, 0.88f, 0.95f),
-                new Vector2(0.32f, 0.1f), new Vector2(0.65f, 0.5f), Vector2.zero, defaultFont);
+                new Vector2(0.26f, 0.1f), new Vector2(0.57f, 0.5f), Vector2.zero, defaultFont);
 
             // Pending Construction Orders Badge
             var pendingPanel = CreatePanel("PendingOrders_Panel", topPanel.transform,
-                new Vector2(0.5f, 0.52f), new Vector2(0.66f, 0.95f), new Vector2(0.5f, 0.5f),
+                new Vector2(0.40f, 0.52f), new Vector2(0.57f, 0.95f), new Vector2(0.5f, 0.5f),
                 Vector2.zero, Vector2.zero, new Color(0.25f, 0.2f, 0.05f, 0.9f));
             var pendingCountText = CreateText("PendingOrders_Text", pendingPanel.transform, "Pending orders: 0",
                 12, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(1f, 0.85f, 0.3f, 1f),
                 Vector2.zero, Vector2.one, Vector2.zero, defaultFont);
             pendingPanel.SetActive(false);
 
-            // Action Buttons (Undo, Redo, Clear)
+            // Action Buttons (Erase, Undo, Redo, Clear)
+            var eraseBtn = CreateButton("BtnErase", topPanel.transform, "Erase [X]",
+                new Vector2(0.58f, 0.2f), new Vector2(0.67f, 0.8f), new Color(0.45f, 0.22f, 0.16f, 1f), defaultFont);
+
             var undoBtn = CreateButton("BtnUndo", topPanel.transform, "Undo [Ctrl+Z]",
                 new Vector2(0.68f, 0.2f), new Vector2(0.77f, 0.8f), new Color(0.18f, 0.32f, 0.48f, 1f), defaultFont);
 
@@ -197,6 +200,7 @@ namespace TMBS.Editor
             so.FindProperty("undoButton").objectReferenceValue = undoBtn;
             so.FindProperty("redoButton").objectReferenceValue = redoBtn;
             so.FindProperty("clearButton").objectReferenceValue = clearBtn;
+            so.FindProperty("eraseButton").objectReferenceValue = eraseBtn;
             so.FindProperty("toastPanel").objectReferenceValue = toastPanel;
             so.FindProperty("toastText").objectReferenceValue = toastText;
             so.FindProperty("pendingPanel").objectReferenceValue = pendingPanel;

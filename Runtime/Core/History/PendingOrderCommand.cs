@@ -17,12 +17,20 @@ namespace TMBS.Core.History
             public bool WasCancelledByUndo;
         }
 
+        private sealed class CancelledOrderRecord
+        {
+            public PendingOrder Order;
+            public PendingState PreviousState;
+            public int CurrentOrderId;
+        }
+
         private readonly IPendingStore _store;
         private readonly IEventBus _events;
         private readonly string _instanceId;
         private readonly bool _emitEvents;
         private readonly bool _replaceExisting;
         private readonly List<OrderRecord> _records;
+        private readonly List<CancelledOrderRecord> _cancelledOrders;
 
         public PendingOrderCommand(
             IPendingStore store,
@@ -30,7 +38,8 @@ namespace TMBS.Core.History
             string instanceId,
             List<(BoundsInt bounds, PendingCell[] cells, PendingState initialState)> orders,
             bool emitEvents,
-            bool replaceExisting)
+            bool replaceExisting,
+            List<int> cancelOrderIds = null)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _events = events;
@@ -38,6 +47,7 @@ namespace TMBS.Core.History
             _emitEvents = emitEvents;
             _replaceExisting = replaceExisting;
             _records = new List<OrderRecord>(orders != null ? orders.Count : 0);
+            _cancelledOrders = new List<CancelledOrderRecord>(cancelOrderIds != null ? cancelOrderIds.Count : 0);
 
             if (orders != null)
             {
@@ -53,10 +63,29 @@ namespace TMBS.Core.History
                     });
                 }
             }
+
+            if (cancelOrderIds != null)
+            {
+                for (int i = 0; i < cancelOrderIds.Count; i++)
+                {
+                    if (cancelOrderIds[i] > 0)
+                    {
+                        _cancelledOrders.Add(new CancelledOrderRecord
+                        {
+                            CurrentOrderId = cancelOrderIds[i]
+                        });
+                    }
+                }
+            }
         }
 
         public void Execute()
         {
+            for (int i = 0; i < _cancelledOrders.Count; i++)
+            {
+                CancelRecordedOrder(_cancelledOrders[i]);
+            }
+
             for (int r = 0; r < _records.Count; r++)
             {
                 var rec = _records[r];
@@ -69,14 +98,7 @@ namespace TMBS.Core.History
                     {
                         if (_store.TryGetByCell(cells[c].Cell, out var existing, out _))
                         {
-                            var existingBounds = existing.Bounds;
-                            existing.SetState(PendingState.Cancelled);
-                            _store.Remove(existing.Id);
-                            if (_emitEvents)
-                            {
-                                _events?.Publish(new PendingChangedEvent(_instanceId, existing.Id, PendingState.Cancelled));
-                                _events?.Publish(new PendingCompletedEvent(_instanceId, existing.Id, existingBounds));
-                            }
+                            CancelOrder(existing);
                         }
                     }
                 }
@@ -112,10 +134,35 @@ namespace TMBS.Core.History
                     rec.CurrentOrderId = 0;
                 }
             }
+
+            for (int i = 0; i < _cancelledOrders.Count; i++)
+            {
+                var rec = _cancelledOrders[i];
+                if (rec.Order == null)
+                    continue;
+
+                if (HasOccupiedCell(rec.Order))
+                {
+                    rec.CurrentOrderId = 0;
+                    continue;
+                }
+
+                rec.Order.SetState(rec.PreviousState);
+                int restoredId = _store.Add(rec.Order);
+                rec.CurrentOrderId = restoredId;
+
+                if (_emitEvents)
+                    _events?.Publish(new PendingCreatedEvent(_instanceId, restoredId, rec.Order.Bounds));
+            }
         }
 
         public void Redo()
         {
+            for (int i = 0; i < _cancelledOrders.Count; i++)
+            {
+                CancelRecordedOrder(_cancelledOrders[i]);
+            }
+
             for (int r = 0; r < _records.Count; r++)
             {
                 var rec = _records[r];
@@ -156,6 +203,50 @@ namespace TMBS.Core.History
                 if (_emitEvents)
                     _events?.Publish(new PendingCreatedEvent(_instanceId, id, rec.Bounds));
             }
+        }
+
+        private void CancelRecordedOrder(CancelledOrderRecord rec)
+        {
+            if (rec.CurrentOrderId > 0 && _store.TryGet(rec.CurrentOrderId, out var existing))
+            {
+                rec.Order = existing;
+                rec.PreviousState = existing.State;
+                CancelOrder(existing);
+                rec.CurrentOrderId = 0;
+            }
+            else
+            {
+                rec.Order = null;
+                rec.CurrentOrderId = 0;
+            }
+        }
+
+        private void CancelOrder(PendingOrder existing)
+        {
+            var existingBounds = existing.Bounds;
+            existing.SetState(PendingState.Cancelled);
+            _store.Remove(existing.Id);
+
+            if (_emitEvents)
+            {
+                _events?.Publish(new PendingChangedEvent(_instanceId, existing.Id, PendingState.Cancelled));
+                _events?.Publish(new PendingCompletedEvent(_instanceId, existing.Id, existingBounds));
+            }
+        }
+
+        private bool HasOccupiedCell(PendingOrder order)
+        {
+            var cells = order.Cells;
+            if (cells == null)
+                return false;
+
+            for (int c = 0; c < cells.Length; c++)
+            {
+                if (_store.TryGetByCell(cells[c].Cell, out _, out _))
+                    return true;
+            }
+
+            return false;
         }
     }
 }

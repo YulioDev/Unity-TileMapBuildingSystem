@@ -43,15 +43,49 @@ namespace TMBS.Core.Pending
             if (!writeMask.AnyTrue())
                 return;
 
-            bool isBlueprint = ctx.BuildableData != null && ctx.BuildableData.isBlueprint;
-            List<(BoundsInt bounds, PendingCell[] cells, PendingState initialState)> orderDefs;
+            List<int> cancelOrderIds = null;
 
-            if (isBlueprint || _config.groupingMode == PendingGroupingMode.CellBlocks)
-                orderDefs = BuildBlockPendingOrders(ctx, bounds, writeMask);
-            else
-                orderDefs = BuildIndividualPendingOrders(ctx, writeMask);
+            if (ctx.AlternateBehaviour)
+            {
+                var copy = TMBS.Core.Validation.CellMaskPool.Rent(writeMask.Bounds, false);
+                Array.Copy(writeMask.Bits, copy.Bits, writeMask.Length);
+                writeMask = copy;
 
-            if (orderDefs == null || orderDefs.Count == 0)
+                cancelOrderIds = new List<int>();
+                for (int i = 0; i < writeMask.Length; i++)
+                {
+                    if (!writeMask.Bits[i]) continue;
+
+                    var cell = writeMask.CellAt(i);
+                    if (_store.TryGetByCell(cell, out var existingPending, out int idx) &&
+                        !existingPending.Cells[idx].IsCompleted)
+                    {
+                        if (!cancelOrderIds.Contains(existingPending.Id))
+                            cancelOrderIds.Add(existingPending.Id);
+
+                        writeMask.Bits[i] = false;
+                    }
+                    else if (targetTilemap == null || !targetTilemap.HasTile(cell))
+                    {
+                        writeMask.Bits[i] = false;
+                    }
+                }
+            }
+
+            bool isBlueprint = !ctx.AlternateBehaviour && ctx.BuildableData != null && ctx.BuildableData.isBlueprint;
+            List<(BoundsInt bounds, PendingCell[] cells, PendingState initialState)> orderDefs = null;
+
+            if (writeMask.AnyTrue())
+            {
+                if (isBlueprint || _config.groupingMode == PendingGroupingMode.CellBlocks)
+                    orderDefs = BuildBlockPendingOrders(ctx, bounds, writeMask);
+                else
+                    orderDefs = BuildIndividualPendingOrders(ctx, writeMask);
+            }
+
+            bool hasNewOrders = orderDefs != null && orderDefs.Count > 0;
+            bool hasCancellations = cancelOrderIds != null && cancelOrderIds.Count > 0;
+            if (!hasNewOrders && !hasCancellations)
                 return;
 
             var command = new PendingOrderCommand(
@@ -60,7 +94,8 @@ namespace TMBS.Core.Pending
                 ctx.InstanceId,
                 orderDefs,
                 _config.emitPendingEvents,
-                _config.replaceExistingPending);
+                _config.replaceExistingPending,
+                cancelOrderIds);
 
             if (_history != null)
             {
@@ -143,7 +178,7 @@ namespace TMBS.Core.Pending
 
         private int ResolveResourceCost(in PipelineContext ctx, Vector3Int cell)
         {
-            if (_config.resourcePolicy == ResourceRequirement.None) return 0;
+            if (ctx.AlternateBehaviour || _config.resourcePolicy == ResourceRequirement.None) return 0;
             var data = ctx.BuildableData;
             if (data == null) return _config.resourceCost;
             return _config.costMode == PendingCostMode.DefinitionProvider

@@ -38,7 +38,10 @@ namespace TMBS.Unity.Preview
             _tilemap.SetTile(cell.Cell, tile);
             _tilemap.SetTileFlags(cell.Cell, TileFlags.None);
             _tilemap.SetTransformMatrix(cell.Cell, cell.TransformMatrix);
-            _tilemap.SetColor(cell.Cell, ResolveColor(state));
+            Color color = (cell.Tile == null && state != PendingState.Completed)
+                ? _archetype.invalidColor
+                : ResolveColor(state);
+            _tilemap.SetColor(cell.Cell, color);
         }
 
         public void ClearCell(Vector3Int cell)
@@ -72,7 +75,10 @@ namespace TMBS.Unity.Preview
 
         private TileBase FallbackTile(PendingCell cell)
         {
-            return _fallbackToOriginal ? cell.Tile : null;
+            if (!_fallbackToOriginal)
+                return null;
+
+            return cell.Tile != null ? cell.Tile : TilemapPreviewRenderer.GetFallbackIndicatorTile();
         }
 
         private Color ResolveColor(PendingState state)

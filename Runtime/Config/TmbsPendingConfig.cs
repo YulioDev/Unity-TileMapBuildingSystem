@@ -48,8 +48,8 @@ namespace TMBS.Runtime.Config
         [Tooltip("If true, a block-grouped pending can be partially completed.")]
         public bool allowPartialCompletion = true;
 
-        [Tooltip("If true, AlternateBehaviour (erase) also creates pending orders. Usually false.")]
-        public bool pendingOnErase = false;
+        [Tooltip("If true, AlternateBehaviour (erase) also cancels pending orders or creates demolition orders.")]
+        public bool pendingOnErase = true;
 
         [Tooltip("If true, TMBS emits events when pending orders are created, changed, or completed.")]
         public bool emitPendingEvents = true;

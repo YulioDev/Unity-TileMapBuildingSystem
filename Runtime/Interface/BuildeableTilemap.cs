@@ -57,6 +57,8 @@ namespace TMBS.Runtime.Interface
         /// <summary>Gets the active buildable definition.</summary>
         public BuildableDef CurrentBuildable => currentBuildable;
 
+        public bool IsEraseMode { get; private set; }
+
         /// <summary>Event bus for validation, selection, and pending construction events.</summary>
         public IEventBus Events => _events;
 
@@ -66,9 +68,32 @@ namespace TMBS.Runtime.Interface
         /// <summary>Root configuration asset.</summary>
         public TmbsRootConfig RootConfig => rootConfig;
 
+        public void SetEraseMode(bool active)
+        {
+            if (IsEraseMode == active) return;
+
+            _pipeline?.CancelActiveOperation();
+            _hasLastPreviewIntent = false;
+
+            IsEraseMode = active;
+
+            if (active)
+            {
+                currentBuildable = null;
+                _tileSelectionState?.ResetTransform();
+                _preview?.UpdateTile(null);
+            }
+
+            PublishSelectionChanged();
+            RefreshPreview();
+        }
+
+        public void ToggleEraseMode() => SetEraseMode(!IsEraseMode);
+
         /// <summary>Sets the active buildable, resets transform, and publishes a selection change event.</summary>
         public void SetBuildable(BuildableDef descriptor)
         {
+            IsEraseMode = false;
             currentBuildable = descriptor;
             _tileSelectionState?.ResetTransform();
             PublishSelectionChanged();
@@ -100,6 +125,7 @@ namespace TMBS.Runtime.Interface
         public void ClearSelection()
         {
             _pipeline?.CancelActiveOperation();
+            IsEraseMode = false;
             currentBuildable = null;
             _tileSelectionState?.ResetTransform();
             _preview?.Hide();
@@ -769,6 +795,16 @@ namespace TMBS.Runtime.Interface
                 return;
             }
 
+            if (IsEraseMode && !intent.AlternateBehaviour &&
+                (intent.Type == BuildIntentType.PointMove ||
+                 intent.Type == BuildIntentType.DragStart ||
+                 intent.Type == BuildIntentType.DragUpdate ||
+                 intent.Type == BuildIntentType.DragEnd ||
+                 intent.Type == BuildIntentType.Confirm))
+            {
+                intent = new BuildIntent(intent.Type, intent.WorldPoint, true);
+            }
+
             var ctx = _pipeline.Process(instanceId, in intent);
 
             if (intent.Type == BuildIntentType.Cancel)
@@ -800,9 +836,12 @@ namespace TMBS.Runtime.Interface
             if (intent.Type != BuildIntentType.Confirm)
             {
                 bool isDragging = intent.Type == BuildIntentType.DragStart || intent.Type == BuildIntentType.DragUpdate;
-                if (_previewEvaluator.ShouldShowPreview(_activeMode, isDragging))
+                if (_previewEvaluator.ShouldShowPreview(_activeMode, isDragging) &&
+                    (_tileSelectionState.HasTile || intent.AlternateBehaviour))
                 {
+                    _preview.UpdateTile(intent.AlternateBehaviour ? null : _tileSelectionState.CurrentTile);
                     _preview.UpdateTransform(_tileSelectionState.Transform.ToMatrix());
+                    bool previewValid = !intent.AlternateBehaviour && ctx.QuickValidation.IsValid;
                     if (ctx.HasDragBounds)
                     {
                         if (ctx.Feedback.HasBlockedCells)
@@ -811,7 +850,7 @@ namespace TMBS.Runtime.Interface
                         }
                         else
                         {
-                            _preview.ShowRect(ctx.DragBounds, ctx.QuickValidation.IsValid);
+                            _preview.ShowRect(ctx.DragBounds, previewValid);
                         }
                     }
                     else
@@ -823,7 +862,7 @@ namespace TMBS.Runtime.Interface
                         }
                         else
                         {
-                            _preview.ShowCell(ctx.Cell, ctx.QuickValidation.IsValid);
+                            _preview.ShowCell(ctx.Cell, previewValid);
                         }
                     }
                 }

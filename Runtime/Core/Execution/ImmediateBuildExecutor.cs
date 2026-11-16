@@ -49,17 +49,7 @@ namespace TMBS.Core.Execution
                 return;
             }
 
-            int trueCount = 0;
-            for (int i = 0; i < writeMask.Length; i++)
-            {
-                if (writeMask.Bits[i])
-                {
-                    trueCount++;
-                }
-            }
-
-            var changes = new TileChange[trueCount];
-            int changeIndex = 0;
+            var changeList = new List<TileChange>(writeMask.Length);
             var beforeTiles = targetTilemap.GetTilesBlock(bounds);
 
             for (int z = 0; z < bounds.size.z; z++)
@@ -69,36 +59,45 @@ namespace TMBS.Core.Execution
                     for (int x = 0; x < bounds.size.x; x++)
                     {
                         var cell = bounds.position + new Vector3Int(x, y, z);
-                        
-                        if (writeMask.Bits[writeMask.IndexOf(cell)])
+
+                        if (!writeMask.Bits[writeMask.IndexOf(cell)])
+                            continue;
+
+                        int blockIndex = TMBS.Core.Grid.TileBlockIndex.IndexOf(bounds, cell);
+                        var beforeTile = beforeTiles[blockIndex];
+
+                        BuildRecord? beforeMeta = null;
+                        if (_metadata != null && _metadata.TryGet(cell, out var record))
                         {
-                            int blockIndex = TMBS.Core.Grid.TileBlockIndex.IndexOf(bounds, cell);
-                            var beforeTile = beforeTiles[blockIndex];
-                            var beforeMatrix = targetTilemap.GetTransformMatrix(cell);
-                            var afterTile = ctx.AlternateBehaviour ? ctx.Decision.AlternateWriteTile : ctx.Decision.WriteTile;
-                            var afterMatrix = ctx.AlternateBehaviour ? Matrix4x4.identity : ctx.Decision.TransformMatrix;
-
-                            BuildRecord? beforeMeta = null;
-                            if (_metadata != null && _metadata.TryGet(cell, out var record))
-                            {
-                                beforeMeta = record;
-                            }
-
-                            BuildRecord? afterMeta = null;
-                            if (afterTile != null && ctx.Decision.ConstructionId > 0)
-                            {
-                                afterMeta = new BuildRecord(
-                                    afterTile,
-                                    cell,
-                                    BuildState.Completed,
-                                    ctx.BuildableData);
-                            }
-
-                            changes[changeIndex++] = new TileChange(cell, beforeTile, afterTile, beforeMeta, afterMeta, beforeMatrix, afterMatrix);
+                            beforeMeta = record;
                         }
+
+                        if (ctx.AlternateBehaviour && beforeTile == null && !beforeMeta.HasValue)
+                            continue;
+
+                        var beforeMatrix = targetTilemap.GetTransformMatrix(cell);
+                        var afterTile = ctx.AlternateBehaviour ? ctx.Decision.AlternateWriteTile : ctx.Decision.WriteTile;
+                        var afterMatrix = ctx.AlternateBehaviour ? Matrix4x4.identity : ctx.Decision.TransformMatrix;
+
+                        BuildRecord? afterMeta = null;
+                        if (afterTile != null && ctx.Decision.ConstructionId > 0)
+                        {
+                            afterMeta = new BuildRecord(
+                                afterTile,
+                                cell,
+                                BuildState.Completed,
+                                ctx.BuildableData);
+                        }
+
+                        changeList.Add(new TileChange(cell, beforeTile, afterTile, beforeMeta, afterMeta, beforeMatrix, afterMatrix));
                     }
                 }
             }
+
+            if (changeList.Count == 0)
+                return;
+
+            var changes = changeList.ToArray();
 
             var instanceId = ctx.InstanceId;
 

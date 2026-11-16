@@ -47,6 +47,7 @@ namespace TMBS.UI
         [SerializeField] private Button undoButton;
         [SerializeField] private Button redoButton;
         [SerializeField] private Button clearButton;
+        [SerializeField] private Button eraseButton;
 
         [Header("Validation Feedback (Toast)")]
         [SerializeField] private GameObject toastPanel;
@@ -73,6 +74,9 @@ namespace TMBS.UI
             Key.Numpad6, Key.Numpad7, Key.Numpad8, Key.Numpad9
         };
 #endif
+
+        private static readonly Color EraseNormalColor = new Color(0.45f, 0.22f, 0.16f, 1f);
+        private static readonly Color EraseActiveColor = new Color(0.85f, 0.28f, 0.22f, 1f);
 
         // Runtime state
         private readonly List<TmbsPaletteSlot> _instantiatedSlots = new List<TmbsPaletteSlot>();
@@ -103,6 +107,7 @@ namespace TMBS.UI
                 Debug.LogWarning("TMBS: Palette container is not assigned. Use the TmbsBuildingUI prefab or Tools/TMBS/1. Configure Scene UI.", this);
             }
 
+            EnsureEraseButton();
             HookButtons();
         }
 
@@ -124,6 +129,7 @@ namespace TMBS.UI
             BuildPalette();
             RefreshActiveItemDisplay(null, null);
             UpdatePendingCount();
+            RefreshEraseButtonVisual();
         }
 
         private void OnDisable()
@@ -204,6 +210,7 @@ namespace TMBS.UI
 
             RefreshActiveItemDisplay(evt.Selection.BuildableData, evt.Selection.BuildTile);
             HighlightSlotForSelection(evt.Selection.BuildableData, evt.Selection.BuildTile);
+            RefreshEraseButtonVisual();
         }
 
         private void OnTmbsValidationFailed(ValidationFailedEvent evt)
@@ -456,6 +463,7 @@ namespace TMBS.UI
             }
 
             HighlightSlot(clickedSlot);
+            RefreshEraseButtonVisual();
         }
 
         private void HighlightSlot(TmbsPaletteSlot targetSlot)
@@ -494,6 +502,20 @@ namespace TMBS.UI
 
         private void RefreshActiveItemDisplay(TmbsBuildableData data, TileBase tile)
         {
+            if (buildeableTilemap != null && buildeableTilemap.IsEraseMode)
+            {
+                if (activeItemNameText != null) activeItemNameText.text = "Mode: Erase";
+                bool isPending = buildeableTilemap.RootConfig != null && buildeableTilemap.RootConfig.executionMode == ExecutionMode.Pending;
+                if (activeItemDetailsText != null)
+                {
+                    activeItemDetailsText.text = isPending
+                        ? "Pending: Click or drag to cancel orders or queue demolition."
+                        : "Immediate: Click or drag to erase cells.";
+                }
+                if (activeItemIcon != null) activeItemIcon.enabled = false;
+                return;
+            }
+
             if (data == null && tile == null)
             {
                 if (activeItemNameText != null) activeItemNameText.text = "Mode: Inspect";
@@ -599,6 +621,109 @@ namespace TMBS.UI
                 clearButton.onClick.RemoveAllListeners();
                 clearButton.onClick.AddListener(OnClearClicked);
             }
+
+            if (eraseButton != null)
+            {
+                eraseButton.onClick.RemoveAllListeners();
+                eraseButton.onClick.AddListener(OnEraseClicked);
+            }
+        }
+
+        private void EnsureEraseButton()
+        {
+            if (eraseButton != null || activeItemPanel == null) return;
+
+            if (pendingPanel != null)
+            {
+                var pendingRt = pendingPanel.GetComponent<RectTransform>();
+                if (pendingRt != null)
+                {
+                    pendingRt.anchorMin = new Vector2(0.40f, 0.52f);
+                    pendingRt.anchorMax = new Vector2(0.57f, 0.95f);
+                }
+            }
+
+            if (activeItemDetailsText != null)
+            {
+                var detailsRt = activeItemDetailsText.GetComponent<RectTransform>();
+                if (detailsRt != null)
+                {
+                    var max = detailsRt.anchorMax;
+                    max.x = 0.57f;
+                    detailsRt.anchorMax = max;
+                }
+            }
+
+            Font font = null;
+            if (undoButton != null)
+            {
+                var undoLabel = undoButton.GetComponentInChildren<Text>();
+                if (undoLabel != null)
+                {
+                    font = undoLabel.font;
+                }
+            }
+            if (font == null)
+            {
+                font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                if (font == null)
+                {
+                    font = Font.CreateDynamicFontFromOSFont("Arial", 12);
+                }
+            }
+
+            var btnObj = new GameObject("BtnErase", typeof(RectTransform), typeof(Image), typeof(Button));
+            btnObj.transform.SetParent(activeItemPanel.transform, false);
+
+            var rt = btnObj.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0.58f, 0.2f);
+            rt.anchorMax = new Vector2(0.67f, 0.8f);
+            rt.offsetMin = new Vector2(4f, 4f);
+            rt.offsetMax = new Vector2(-4f, -4f);
+
+            var img = btnObj.GetComponent<Image>();
+            img.raycastTarget = true;
+
+            eraseButton = btnObj.GetComponent<Button>();
+
+            var labelObj = new GameObject("Label", typeof(RectTransform), typeof(Text));
+            labelObj.transform.SetParent(btnObj.transform, false);
+            var labelRt = labelObj.GetComponent<RectTransform>();
+            labelRt.anchorMin = Vector2.zero;
+            labelRt.anchorMax = Vector2.one;
+            labelRt.offsetMin = Vector2.zero;
+            labelRt.offsetMax = Vector2.zero;
+
+            var label = labelObj.GetComponent<Text>();
+            label.text = "Erase [X]";
+            label.fontSize = 12;
+            label.fontStyle = FontStyle.Bold;
+            label.alignment = TextAnchor.MiddleCenter;
+            label.color = Color.white;
+            label.font = font;
+            label.raycastTarget = false;
+
+            RefreshEraseButtonVisual();
+        }
+
+        private void RefreshEraseButtonVisual()
+        {
+            if (eraseButton == null) return;
+
+            bool active = buildeableTilemap != null && buildeableTilemap.IsEraseMode;
+
+            var img = eraseButton.GetComponent<Image>();
+            if (img != null)
+            {
+                img.color = active ? EraseActiveColor : EraseNormalColor;
+            }
+
+            var colors = eraseButton.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = active ? new Color(1f, 0.9f, 0.9f, 1f) : new Color(0.85f, 0.85f, 0.85f, 1f);
+            colors.pressedColor = new Color(0.7f, 0.7f, 0.7f, 1f);
+            colors.selectedColor = Color.white;
+            eraseButton.colors = colors;
         }
 
         public void OnUndoClicked()
@@ -638,7 +763,26 @@ namespace TMBS.UI
             }
             HighlightSlot(null);
             RefreshActiveItemDisplay(null, null);
+            RefreshEraseButtonVisual();
             ShowToast("Selection cleared.");
+        }
+
+        public void OnEraseClicked()
+        {
+            if (buildeableTilemap == null) return;
+
+            bool nextState = !buildeableTilemap.IsEraseMode;
+            _hasUserClearedSelection = nextState;
+            buildeableTilemap.SetEraseMode(nextState);
+
+            if (nextState)
+            {
+                HighlightSlot(null);
+            }
+
+            RefreshActiveItemDisplay(buildeableTilemap.CurrentBuildable?.ResolveData(), buildeableTilemap.CurrentBuildable?.ResolvePrimaryTile());
+            RefreshEraseButtonVisual();
+            ShowToast(nextState ? "Erase mode enabled." : "Erase mode disabled.");
         }
 
         private void HandlePaletteHotkeys()
@@ -647,6 +791,12 @@ namespace TMBS.UI
             var keyboard = Keyboard.current;
             if (keyboard != null)
             {
+                if (keyboard.xKey.wasPressedThisFrame)
+                {
+                    OnEraseClicked();
+                    return;
+                }
+
                 for (int i = 0; i < 9 && i < _instantiatedSlots.Count; i++)
                 {
                     if (keyboard[DigitKeys[i]].wasPressedThisFrame || keyboard[NumpadKeys[i]].wasPressedThisFrame)
@@ -659,6 +809,12 @@ namespace TMBS.UI
             }
 #endif
 #if ENABLE_LEGACY_INPUT_MANAGER
+            if (Input.GetKeyDown(KeyCode.X))
+            {
+                OnEraseClicked();
+                return;
+            }
+
             for (int i = 0; i < 9 && i < _instantiatedSlots.Count; i++)
             {
                 if (Input.GetKeyDown(KeyCode.Alpha1 + i) || Input.GetKeyDown(KeyCode.Keypad1 + i))

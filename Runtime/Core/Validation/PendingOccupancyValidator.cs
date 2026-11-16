@@ -13,7 +13,7 @@ namespace TMBS.Core.Validation
 
         public ValidationResult Validate(in PipelineContext ctx, ValidationMode mode)
         {
-            if (_store == null) return ValidationResult.Valid;
+            if (_store == null || ctx.AlternateBehaviour) return ValidationResult.Valid;
 
             var opBounds = ValidationUtil.GetOperationBounds(in ctx);
             int len = opBounds.size.x * opBounds.size.y * opBounds.size.z;

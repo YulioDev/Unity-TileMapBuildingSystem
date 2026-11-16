@@ -758,9 +758,21 @@ namespace TMBS.Runtime.Debugging
             GUILayout.Box(stateName, badgeStyle, GUILayout.Width(130), GUILayout.Height(18));
 
             // Buildable definition name
-            string buildableName = order.PrimaryBuildableData != null
-                ? order.PrimaryBuildableData.displayName
-                : (order.Cells != null && order.Cells.Length > 0 && order.Cells[0].Tile != null ? order.Cells[0].Tile.name : "Tile");
+            string buildableName;
+            if (order.PrimaryBuildableData != null)
+            {
+                buildableName = order.PrimaryBuildableData.displayName;
+            }
+            else if (order.Cells != null && order.Cells.Length > 0)
+            {
+                buildableName = order.Cells[0].Tile != null
+                    ? order.Cells[0].Tile.name
+                    : "Demolition / Erase";
+            }
+            else
+            {
+                buildableName = "Tile";
+            }
             GUILayout.Label($"[{buildableName}]", _metricValueStyle);
 
             GUILayout.FlexibleSpace();

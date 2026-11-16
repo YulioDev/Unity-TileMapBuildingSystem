@@ -6,11 +6,14 @@ namespace TMBS.Unity.Preview
 {
     public sealed class TilemapPreviewRenderer : IPreviewRenderer
     {
+        private static Tile _fallbackIndicatorTile;
+
         private readonly Tilemap _tilemap;
         private readonly Color _validColor;
         private readonly Color _invalidColor;
 
         private TileBase _tile;
+        private TileBase _lastRenderedTile;
         private BoundsInt _last;
         private bool _hasLast;
         private bool _lastValid;
@@ -55,11 +58,11 @@ namespace TMBS.Unity.Preview
         {
             ClearPrevious();
 
-            if (_tile == null) return;
+            TileBase activeTile = _tile != null ? _tile : GetFallbackIndicatorTile();
 
             int len = Volume(fullArea);
             EnsureBuffer(len);
-            FillArray(_buffer, len, _tile);
+            FillArray(_buffer, len, activeTile);
             _tilemap.SetTilesBlock(fullArea, _buffer);
 
             // Apply per-cell transform and color overlay
@@ -83,12 +86,14 @@ namespace TMBS.Unity.Preview
             _last = fullArea;
             _hasLast = true;
             _lastMatrix = _transformMatrix;
+            _lastRenderedTile = activeTile;
         }
 
         public void Hide()
         {
             _tilemap.ClearAllTiles();
             _hasLast = false;
+            _lastRenderedTile = null;
         }
 
         private void ClearPrevious()
@@ -96,20 +101,25 @@ namespace TMBS.Unity.Preview
             if (!_hasLast) return;
             _tilemap.ClearAllTiles();
             _hasLast = false;
+            _lastRenderedTile = null;
         }
 
         private void UpdateIncremental(BoundsInt next, bool valid)
         {
-            if (_tile == null) return;
+            TileBase activeTile = _tile != null ? _tile : GetFallbackIndicatorTile();
 
-            if (_hasLast && SameBounds(_last, next) && _lastValid == valid && _lastMatrix == _transformMatrix)
+            if (_hasLast &&
+                SameBounds(_last, next) &&
+                _lastValid == valid &&
+                _lastMatrix == _transformMatrix &&
+                _lastRenderedTile == activeTile)
                 return;
 
             ClearPrevious();
 
             int len = Volume(next);
             EnsureBuffer(len);
-            FillArray(_buffer, len, _tile);
+            FillArray(_buffer, len, activeTile);
 
             _tilemap.SetTilesBlock(next, _buffer);
             ApplyTransformAndColorToArea(next, valid ? _validColor : _invalidColor);
@@ -118,6 +128,28 @@ namespace TMBS.Unity.Preview
             _hasLast = true;
             _lastValid = valid;
             _lastMatrix = _transformMatrix;
+            _lastRenderedTile = activeTile;
+        }
+
+        internal static Tile GetFallbackIndicatorTile()
+        {
+            if (_fallbackIndicatorTile != null)
+                return _fallbackIndicatorTile;
+
+            var texture = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+            texture.SetPixel(0, 0, Color.white);
+            texture.Apply();
+            texture.hideFlags = HideFlags.HideAndDontSave;
+
+            var sprite = Sprite.Create(texture, new Rect(0f, 0f, 1f, 1f), new Vector2(0.5f, 0.5f), 1f);
+            sprite.hideFlags = HideFlags.HideAndDontSave;
+
+            _fallbackIndicatorTile = ScriptableObject.CreateInstance<Tile>();
+            _fallbackIndicatorTile.sprite = sprite;
+            _fallbackIndicatorTile.color = Color.white;
+            _fallbackIndicatorTile.hideFlags = HideFlags.HideAndDontSave;
+
+            return _fallbackIndicatorTile;
         }
 
         private void ApplyTransformAndColorToArea(BoundsInt area, Color color)
