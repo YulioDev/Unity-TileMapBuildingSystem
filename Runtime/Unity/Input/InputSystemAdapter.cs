@@ -10,7 +10,6 @@ namespace TMBS.Unity.Input
     /// <summary>
     /// IBuildInputAdapter implementation that reads from Unity Input System
     /// InputActionReferences and translates them into BuildIntents.
-    /// Mirrors the drag lifecycle logic of LegacyMouseAdapter.
     /// </summary>
     public sealed class InputSystemAdapter : IUpdatableInput
     {
@@ -97,7 +96,6 @@ namespace TMBS.Unity.Input
             Vector3 mouseWorldPos = ResolveWorldPosition(camera);
             bool isAlternate = IsActionPressed(_alternateRef);
 
-            // Undo
             if (WasActionPerformed(_undoRef))
             {
                 BuildIntentRaised?.Invoke(
@@ -105,7 +103,6 @@ namespace TMBS.Unity.Input
                 return;
             }
 
-            // Redo
             if (WasActionPerformed(_redoRef))
             {
                 BuildIntentRaised?.Invoke(
@@ -113,7 +110,6 @@ namespace TMBS.Unity.Input
                 return;
             }
 
-            // Rotate
             if (WasActionPerformed(_rotateRef))
             {
                 BuildIntentRaised?.Invoke(
@@ -121,7 +117,6 @@ namespace TMBS.Unity.Input
                 return;
             }
 
-            // Mirror
             if (WasActionPerformed(_mirrorRef))
             {
                 BuildIntentRaised?.Invoke(
@@ -129,7 +124,6 @@ namespace TMBS.Unity.Input
                 return;
             }
 
-            // Cancel
             if (WasActionPerformed(_cancelRef))
             {
                 if (_isDragging)
@@ -144,7 +138,6 @@ namespace TMBS.Unity.Input
                 return;
             }
 
-            // Drag lifecycle (mirrors LegacyMouseAdapter)
             if (WasActionPerformed(_dragRef))
             {
                 _isDragging = true;
@@ -175,19 +168,19 @@ namespace TMBS.Unity.Input
 
         private Vector3 ResolveWorldPosition(Camera camera)
         {
+            if (camera == null)
+                return Vector3.zero;
+
             Vector2 screenPos = _pointRef?.action?.ReadValue<Vector2>()
                                 ?? Vector2.zero;
 
-            var ray = camera.ScreenPointToRay(new Vector3(screenPos.x, screenPos.y, 0f));
-            var plane = _constructionPlaneProvider();
-
-            if (plane.Raycast(ray, out var enter))
-                return ray.GetPoint(enter);
-
-            Vector3 fallback = camera.ScreenToWorldPoint(
-                new Vector3(screenPos.x, screenPos.y, 0f));
-            fallback.z = 0f;
-            return fallback;
+            return InputPlaneProjection.TryResolveWorldPoint(
+                screenPos,
+                camera,
+                _constructionPlaneProvider,
+                out Vector3 worldPoint)
+                ? worldPoint
+                : Vector3.zero;
         }
 
         private static void EnableAction(InputActionReference actionRef)

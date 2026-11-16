@@ -5,18 +5,60 @@ using UnityEngine;
 
 namespace TMBS.Unity.Input
 {
+    internal static class InputPlaneProjection
+    {
+        public static bool TryResolveWorldPoint(
+            Vector2 screenPos,
+            Func<Camera> cameraProvider,
+            Func<Plane> planeProvider,
+            out Vector3 worldPoint)
+        {
+            var camera = cameraProvider != null ? cameraProvider() : null;
+            return TryResolveWorldPoint(screenPos, camera, planeProvider, out worldPoint);
+        }
+
+        public static bool TryResolveWorldPoint(
+            Vector2 screenPos,
+            Camera camera,
+            Func<Plane> planeProvider,
+            out Vector3 worldPoint)
+        {
+            if (camera == null)
+            {
+                worldPoint = Vector3.zero;
+                return false;
+            }
+
+            var screenPoint = new Vector3(screenPos.x, screenPos.y, 0f);
+            var ray = camera.ScreenPointToRay(screenPoint);
+            var plane = planeProvider != null
+                ? planeProvider()
+                : new Plane(Vector3.back, Vector3.zero);
+
+            if (plane.Raycast(ray, out float enter))
+            {
+                worldPoint = ray.GetPoint(enter);
+                return true;
+            }
+
+            worldPoint = camera.ScreenToWorldPoint(screenPoint);
+            worldPoint.z = 0f;
+            return true;
+        }
+    }
+
     public sealed class LegacyMouseAdapter : IUpdatableInput
     {
         private readonly Func<Camera> _cameraProvider;
-        private readonly System.Func<UnityEngine.Plane> _constructionPlaneProvider;
+        private readonly Func<Plane> _constructionPlaneProvider;
         private bool _isActive;
         private bool _isDragging;
         private bool _dragAlternate;
 
-        public LegacyMouseAdapter(Func<Camera> cameraProvider, System.Func<UnityEngine.Plane> constructionPlaneProvider = null)
+        public LegacyMouseAdapter(Func<Camera> cameraProvider, Func<Plane> constructionPlaneProvider = null)
         {
             _cameraProvider = cameraProvider ?? (() => Camera.main);
-            _constructionPlaneProvider = constructionPlaneProvider ?? (() => new UnityEngine.Plane(Vector3.back, Vector3.zero));
+            _constructionPlaneProvider = constructionPlaneProvider ?? (() => new Plane(Vector3.back, Vector3.zero));
         }
 
         public InputCapabilities Capabilities => new InputCapabilities(
@@ -47,24 +89,12 @@ namespace TMBS.Unity.Input
             if (!_isActive)
                 return;
 
-            var camera = _cameraProvider();
-
-            if (camera == null)
+            if (!InputPlaneProjection.TryResolveWorldPoint(
+                    UnityEngine.Input.mousePosition,
+                    _cameraProvider,
+                    _constructionPlaneProvider,
+                    out Vector3 mouseWorldPos))
                 return;
-
-            Vector3 mouseWorldPos;
-
-            var ray = camera.ScreenPointToRay(UnityEngine.Input.mousePosition);
-            var plane = _constructionPlaneProvider();
-            if (plane.Raycast(ray, out var enter))
-            {
-                mouseWorldPos = ray.GetPoint(enter);
-            }
-            else
-            {
-                mouseWorldPos = camera.ScreenToWorldPoint(UnityEngine.Input.mousePosition);
-                mouseWorldPos.z = 0f;
-            }
 
             bool isAlternate =
                 UnityEngine.Input.GetKey(KeyCode.LeftShift) ||

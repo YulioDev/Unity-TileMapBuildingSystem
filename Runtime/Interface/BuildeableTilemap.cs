@@ -54,31 +54,19 @@ namespace TMBS.Runtime.Interface
         [SerializeReference]
         private BuildableDef currentBuildable = new SingleTileBuildable();
 
-        /// <summary>
-        /// The currently active buildable definition. Read-only.
-        /// </summary>
+        /// <summary>Gets the active buildable definition.</summary>
         public BuildableDef CurrentBuildable => currentBuildable;
 
-        /// <summary>
-        /// Exposes the event bus so external systems (such as UI) can listen to validation, selection, and pending events.
-        /// </summary>
+        /// <summary>Event bus for validation, selection, and pending construction events.</summary>
         public IEventBus Events => _events;
 
-        /// <summary>
-        /// Exposes the unique instance identifier for event routing and UI filtering.
-        /// </summary>
+        /// <summary>Unique instance identifier used for event routing.</summary>
         public string InstanceId => instanceId;
 
-        /// <summary>
-        /// Exposes the root configuration asset.
-        /// </summary>
+        /// <summary>Root configuration asset.</summary>
         public TmbsRootConfig RootConfig => rootConfig;
 
-        /// <summary>
-        /// Changes the active buildable at runtime. Publishes a selection
-        /// changed event so the pipeline and preview update immediately.
-        /// Call this from your UI tile-selection code.
-        /// </summary>
+        /// <summary>Sets the active buildable, resets transform, and publishes a selection change event.</summary>
         public void SetBuildable(BuildableDef descriptor)
         {
             currentBuildable = descriptor;
@@ -86,10 +74,7 @@ namespace TMBS.Runtime.Interface
             PublishSelectionChanged();
         }
 
-        /// <summary>
-        /// Convenience method for the common single-tile case.
-        /// Equivalent to SetBuildable(new SingleTileBuildable(tile)).
-        /// </summary>
+        /// <summary>Sets a single tile as the active buildable, or clears selection if null.</summary>
         public void SetBuildTile(TileBase tile)
         {
             if (tile == null)
@@ -100,10 +85,7 @@ namespace TMBS.Runtime.Interface
             SetBuildable(new SingleTileBuildable(tile));
         }
 
-        /// <summary>
-        /// Sets the active buildable from a TmbsBuildableData asset.
-        /// Call this from your UI when the player selects a building.
-        /// </summary>
+        /// <summary>Sets the active buildable from a TmbsBuildableData asset, or clears selection if null.</summary>
         public void SetBuildableData(TmbsBuildableData buildableData)
         {
             if (buildableData == null)
@@ -114,9 +96,7 @@ namespace TMBS.Runtime.Interface
             SetBuildable(new SingleTileBuildable(buildableData));
         }
 
-        /// <summary>
-        /// Clears the active buildable selection and hides the preview.
-        /// </summary>
+        /// <summary>Clears the active buildable selection and hides the preview.</summary>
         public void ClearSelection()
         {
             _pipeline?.CancelActiveOperation();
@@ -129,9 +109,7 @@ namespace TMBS.Runtime.Interface
             }
         }
 
-        /// <summary>
-        /// Undoes the last immediate placement command.
-        /// </summary>
+        /// <summary>Undoes the last placement command when undo/redo is enabled.</summary>
         public bool Undo()
         {
             _pipeline?.CancelActiveOperation();
@@ -143,9 +121,7 @@ namespace TMBS.Runtime.Interface
             return false;
         }
 
-        /// <summary>
-        /// Redoes the last undone placement command.
-        /// </summary>
+        /// <summary>Redoes the last undone placement command when undo/redo is enabled.</summary>
         public bool Redo()
         {
             _pipeline?.CancelActiveOperation();
@@ -157,24 +133,18 @@ namespace TMBS.Runtime.Interface
             return false;
         }
 
-        /// <summary>
-        /// Cancels any active drag or preview operation.
-        /// </summary>
+        /// <summary>Cancels any active drag or preview operation.</summary>
         public void CancelActiveOperation()
         {
             _pipeline?.CancelActiveOperation();
             _preview?.Hide();
         }
 
-        /// <summary>
-        /// Gets the current placement transform (rotation and mirror).
-        /// </summary>
+        /// <summary>Gets the current placement transform (rotation and mirror).</summary>
         public TMBS.Core.Selection.PlacementTransform CurrentTransform =>
             _tileSelectionState?.Transform ?? default;
 
-        /// <summary>
-        /// Rotates the current selection by 90 degrees clockwise.
-        /// </summary>
+        /// <summary>Rotates the current selection by 90 degrees clockwise.</summary>
         public void Rotate()
         {
             if (_tileSelectionState == null) return;
@@ -184,9 +154,7 @@ namespace TMBS.Runtime.Interface
             RefreshPreview();
         }
 
-        /// <summary>
-        /// Toggles horizontal mirroring for the current selection.
-        /// </summary>
+        /// <summary>Toggles horizontal mirroring for the current selection.</summary>
         public void Mirror()
         {
             if (_tileSelectionState == null) return;
@@ -206,9 +174,7 @@ namespace TMBS.Runtime.Interface
             OnBuildIntent(intent);
         }
 
-        /// <summary>
-        /// Switches the execution mode (Immediate vs Pending) at runtime and re-composes the pipeline.
-        /// </summary>
+        /// <summary>Switches execution mode at runtime and re-composes the pipeline.</summary>
         public void SwitchExecutionMode(ExecutionMode newMode)
         {
             if (rootConfig == null) return;
@@ -434,37 +400,30 @@ namespace TMBS.Runtime.Interface
             return ValidateInputCapabilities(resolvedInput.Capabilities, inputConfig);
         }
 
-        private IBuildInputAdapter CreateLegacyMouseInputAdapter()
+        private Func<Plane> CreateConstructionPlaneProvider()
         {
-            System.Func<UnityEngine.Plane> planeProvider = () =>
+            return () =>
             {
                 var t = targetTilemap != null ? targetTilemap.transform : null;
                 if (t != null)
-                {
-                    return new UnityEngine.Plane(t.forward, t.position);
-                }
+                    return new Plane(t.forward, t.position);
 
-                return new UnityEngine.Plane(Vector3.back, Vector3.zero);
+                return new Plane(Vector3.back, Vector3.zero);
             };
+        }
 
-            return new TMBS.Unity.Input.LegacyMouseAdapter(ResolveCamera, planeProvider);
+        private IBuildInputAdapter CreateLegacyMouseInputAdapter()
+        {
+            return new TMBS.Unity.Input.LegacyMouseAdapter(ResolveCamera, CreateConstructionPlaneProvider());
         }
 
 #if ENABLE_INPUT_SYSTEM
         private IBuildInputAdapter CreateInputActionsAdapter()
         {
-            System.Func<UnityEngine.Plane> planeProvider = () =>
-            {
-                var t = targetTilemap != null ? targetTilemap.transform : null;
-                if (t != null)
-                    return new UnityEngine.Plane(t.forward, t.position);
-                return new UnityEngine.Plane(Vector3.back, Vector3.zero);
-            };
-
             var cfg = rootConfig.input;
             return new TMBS.Unity.Input.InputSystemAdapter(
                 ResolveCamera,
-                planeProvider,
+                CreateConstructionPlaneProvider(),
                 cfg.pointAction,
                 cfg.dragAction,
                 cfg.cancelAction,

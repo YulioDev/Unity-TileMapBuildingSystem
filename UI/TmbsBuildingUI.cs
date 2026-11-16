@@ -16,9 +16,7 @@ using UnityEngine.InputSystem;
 namespace TMBS.UI
 {
     /// <summary>
-    /// Master UI controller for TMBS (TileMap Building System).
-    /// Provides building palette, dynamic category tabs, HUD with active item details,
-    /// Undo/Redo controls, pending build orders badge, and validation feedback toasts.
+    /// Controls the runtime building palette, category filter tabs, active item HUD, and status feedback.
     /// </summary>
     [DisallowMultipleComponent]
     public class TmbsBuildingUI : MonoBehaviour
@@ -33,9 +31,6 @@ namespace TMBS.UI
 
         [Tooltip("Optional list of direct TileBase assets to display alongside buildable data.")]
         [SerializeField] private List<TileBase> directTiles = new List<TileBase>();
-
-        [Tooltip("If true and buildables list is empty, scans the project for existing TmbsBuildableData at runtime.")]
-        [SerializeField] private bool autoPopulateBuildables = true;
 
         [Header("UI Containers")]
         [SerializeField] private Transform paletteContainer;
@@ -65,12 +60,25 @@ namespace TMBS.UI
         [Header("Shortcuts")]
         [SerializeField] private bool enableKeyboardShortcuts = true;
 
+#if ENABLE_INPUT_SYSTEM
+        private static readonly Key[] DigitKeys =
+        {
+            Key.Digit1, Key.Digit2, Key.Digit3, Key.Digit4, Key.Digit5,
+            Key.Digit6, Key.Digit7, Key.Digit8, Key.Digit9
+        };
+
+        private static readonly Key[] NumpadKeys =
+        {
+            Key.Numpad1, Key.Numpad2, Key.Numpad3, Key.Numpad4, Key.Numpad5,
+            Key.Numpad6, Key.Numpad7, Key.Numpad8, Key.Numpad9
+        };
+#endif
+
         // Runtime state
         private readonly List<TmbsPaletteSlot> _instantiatedSlots = new List<TmbsPaletteSlot>();
-        private readonly List<string> _categories = new List<string> { "Todos" };
+        private readonly List<string> _categories = new List<string> { "All" };
         private readonly List<Button> _instantiatedCategoryButtons = new List<Button>();
-        private string _activeCategory = "Todos";
-        private TmbsPaletteSlot _currentSelectedSlot;
+        private string _activeCategory = "All";
         private Coroutine _toastCoroutine;
         private bool _hasUserClearedSelection = false;
 
@@ -87,12 +95,11 @@ namespace TMBS.UI
         private void Awake()
         {
             EnsureEventSystemExists();
-
             ResolveBuildeableTilemap();
 
-            if (paletteContainer == null || activeItemNameText == null)
+            if (paletteContainer == null)
             {
-                BuildProceduralLayoutIfNeeded();
+                Debug.LogWarning("TMBS: Palette container is not assigned. Use the TmbsBuildingUI prefab or Tools/TMBS/1. Configure Scene UI.", this);
             }
 
             HookButtons();
@@ -110,11 +117,6 @@ namespace TMBS.UI
             if (_selectionChangedSub == null)
             {
                 SubscribeToTmbsEvents();
-            }
-
-            if (autoPopulateBuildables && buildables.Count == 0 && directTiles.Count == 0)
-            {
-                DiscoverDefaultBuildables();
             }
 
             BuildCategoryTabs();
@@ -144,7 +146,7 @@ namespace TMBS.UI
 
             if (enableKeyboardShortcuts)
             {
-                HandleKeyboardShortcuts();
+                HandlePaletteHotkeys();
             }
         }
 
@@ -158,8 +160,6 @@ namespace TMBS.UI
             buildeableTilemap = FindObjectOfType<BuildeableTilemap>();
 #endif
         }
-
-        #region Event Subscriptions
 
         private void SubscribeToTmbsEvents()
         {
@@ -217,16 +217,16 @@ namespace TMBS.UI
             switch (evt.Failure)
             {
                 case ValidationFailure.MissingSelection:
-                    message = "Selecciona un bloque en la paleta antes de construir.";
+                    message = "Select a buildable first.";
                     break;
                 case ValidationFailure.Occupied:
-                    message = "Espacio ocupado. No se puede construir aquí.";
+                    message = "Cell is occupied.";
                     break;
                 case ValidationFailure.OutOfBounds:
-                    message = "Fuera de los límites de construcción.";
+                    message = "Out of bounds.";
                     break;
                 default:
-                    message = "Ubicación de construcción inválida.";
+                    message = "Invalid placement.";
                     break;
             }
 
@@ -251,18 +251,13 @@ namespace TMBS.UI
             UpdatePendingCount();
         }
 
-        #endregion
-
-        #region Category Tabs
-
         /// <summary>
-        /// Populates the category tabs above the palette and binds category filter click handlers.
+        /// Populates the category filter tabs above the palette.
         /// </summary>
         public void BuildCategoryTabs()
         {
-            // Collect categories
             _categories.Clear();
-            _categories.Add("Todos");
+            _categories.Add("All");
 
             foreach (var b in buildables)
             {
@@ -282,7 +277,6 @@ namespace TMBS.UI
 
             if (categoryTabsContainer == null) return;
 
-            // Clear existing category buttons
             for (int i = categoryTabsContainer.childCount - 1; i >= 0; i--)
             {
                 var child = categoryTabsContainer.GetChild(i).gameObject;
@@ -318,7 +312,6 @@ namespace TMBS.UI
 
                 btn.onClick.AddListener(() => SetCategoryFilter(categoryName));
 
-                // Label
                 var labelObj = new GameObject("Label", typeof(RectTransform), typeof(Text));
                 labelObj.transform.SetParent(tabObj.transform, false);
                 var labelRt = labelObj.GetComponent<RectTransform>();
@@ -346,19 +339,14 @@ namespace TMBS.UI
             BuildPalette();
         }
 
-        #endregion
-
-        #region Palette Management
-
         /// <summary>
-        /// Populates or refreshes the palette slots based on current buildables and category filter.
+        /// Rebuilds the palette slots for the current buildables and active category filter.
         /// </summary>
         public void BuildPalette()
         {
             if (paletteContainer == null)
                 return;
 
-            // Clear existing slots safely in play or edit mode
             for (int i = paletteContainer.childCount - 1; i >= 0; i--)
             {
                 var child = paletteContainer.GetChild(i).gameObject;
@@ -369,29 +357,28 @@ namespace TMBS.UI
             }
             _instantiatedSlots.Clear();
 
-            // Create slot for each buildable
             foreach (var data in buildables)
             {
                 if (data == null) continue;
-                if (_activeCategory != "Todos" && data.category != _activeCategory) continue;
+                if (_activeCategory != "All" && data.category != _activeCategory) continue;
 
                 var slot = CreateSlotInstance();
+                if (slot == null) continue;
                 slot.Setup(data, OnSlotClicked);
                 _instantiatedSlots.Add(slot);
             }
 
-            // Create slot for direct tiles
             foreach (var tile in directTiles)
             {
                 if (tile == null) continue;
-                if (_activeCategory != "Todos" && _activeCategory != "Tiles") continue;
+                if (_activeCategory != "All" && _activeCategory != "Tiles") continue;
 
                 var slot = CreateSlotInstance();
+                if (slot == null) continue;
                 slot.Setup(tile, tile.name, null, "Tiles", OnSlotClicked);
                 _instantiatedSlots.Add(slot);
             }
 
-            // Selection state management
             if (buildeableTilemap != null && buildeableTilemap.CurrentBuildable != null)
             {
                 var curTile = buildeableTilemap.CurrentBuildable.ResolvePrimaryTile();
@@ -412,63 +399,13 @@ namespace TMBS.UI
 
         private TmbsPaletteSlot CreateSlotInstance()
         {
-            if (slotPrefab != null)
+            if (slotPrefab == null)
             {
-                return Instantiate(slotPrefab, paletteContainer);
+                Debug.LogWarning("TMBS: Slot prefab is not assigned on TmbsBuildingUI.", this);
+                return null;
             }
 
-            // Fallback: create procedural slot GameObject
-            var slotObj = new GameObject("PaletteSlot", typeof(RectTransform), typeof(Image), typeof(Button), typeof(TmbsPaletteSlot));
-            slotObj.transform.SetParent(paletteContainer, false);
-
-            var rt = slotObj.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(80, 80);
-
-            var bgImage = slotObj.GetComponent<Image>();
-            bgImage.color = new Color(0.12f, 0.15f, 0.2f, 0.85f);
-
-            var btn = slotObj.GetComponent<Button>();
-
-            // Border highlight
-            var borderObj = new GameObject("Border", typeof(RectTransform), typeof(Image));
-            borderObj.transform.SetParent(slotObj.transform, false);
-            var borderRt = borderObj.GetComponent<RectTransform>();
-            borderRt.anchorMin = Vector2.zero;
-            borderRt.anchorMax = Vector2.one;
-            borderRt.sizeDelta = Vector2.zero;
-            var borderImg = borderObj.GetComponent<Image>();
-            borderImg.color = new Color(0.2f, 0.25f, 0.35f, 0.8f);
-            borderImg.raycastTarget = false;
-
-            // Icon Image
-            var iconObj = new GameObject("Icon", typeof(RectTransform), typeof(Image));
-            iconObj.transform.SetParent(slotObj.transform, false);
-            var iconRt = iconObj.GetComponent<RectTransform>();
-            iconRt.anchorMin = new Vector2(0.1f, 0.25f);
-            iconRt.anchorMax = new Vector2(0.9f, 0.95f);
-            iconRt.sizeDelta = Vector2.zero;
-            var iconImg = iconObj.GetComponent<Image>();
-            iconImg.preserveAspect = true;
-            iconImg.raycastTarget = false;
-
-            // Label Text
-            var labelObj = new GameObject("Label", typeof(RectTransform), typeof(Text));
-            labelObj.transform.SetParent(slotObj.transform, false);
-            var labelRt = labelObj.GetComponent<RectTransform>();
-            labelRt.anchorMin = new Vector2(0f, 0f);
-            labelRt.anchorMax = new Vector2(1f, 0.25f);
-            labelRt.sizeDelta = Vector2.zero;
-            var lbl = labelObj.GetComponent<Text>();
-            lbl.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (lbl.font == null) lbl.font = Font.CreateDynamicFontFromOSFont("Arial", 11);
-            lbl.fontSize = 10;
-            lbl.alignment = TextAnchor.MiddleCenter;
-            lbl.color = Color.white;
-            lbl.raycastTarget = false;
-
-            var comp = slotObj.GetComponent<TmbsPaletteSlot>();
-            comp.SetInternalReferences(iconImg, lbl, borderImg, btn);
-            return comp;
+            return Instantiate(slotPrefab, paletteContainer);
         }
 
         private void OnSlotClicked(TmbsPaletteSlot clickedSlot)
@@ -491,7 +428,6 @@ namespace TMBS.UI
 
         private void HighlightSlot(TmbsPaletteSlot targetSlot)
         {
-            _currentSelectedSlot = targetSlot;
             foreach (var slot in _instantiatedSlots)
             {
                 if (slot != null)
@@ -524,16 +460,12 @@ namespace TMBS.UI
             HighlightSlot(matched);
         }
 
-        #endregion
-
-        #region HUD & Notifications
-
         private void RefreshActiveItemDisplay(TmbsBuildableData data, TileBase tile)
         {
             if (data == null && tile == null)
             {
-                if (activeItemNameText != null) activeItemNameText.text = "Modo: Navegación (Inspección)";
-                if (activeItemDetailsText != null) activeItemDetailsText.text = "Haz clic en un bloque de la paleta inferior para construir.";
+                if (activeItemNameText != null) activeItemNameText.text = "Mode: Inspect";
+                if (activeItemDetailsText != null) activeItemDetailsText.text = "Select a block from the palette to build.";
                 if (activeItemIcon != null) activeItemIcon.enabled = false;
                 return;
             }
@@ -545,7 +477,7 @@ namespace TMBS.UI
 
             if (activeItemNameText != null)
             {
-                activeItemNameText.text = $"Construyendo: {displayName}";
+                activeItemNameText.text = $"Building: {displayName}";
             }
 
             string transformInfo = "";
@@ -554,14 +486,14 @@ namespace TMBS.UI
                 var tr = buildeableTilemap.CurrentTransform;
                 if (tr.Rotation != 0 || tr.Mirrored)
                 {
-                    string mirrorStr = tr.Mirrored ? " | Espejo" : "";
-                    transformInfo = $"  |  {tr.Rotation * 90}°{mirrorStr}";
+                    string mirrorStr = tr.Mirrored ? " | Mirrored" : "";
+                    transformInfo = $"  |  {tr.Rotation * 90} deg{mirrorStr}";
                 }
             }
 
             if (activeItemDetailsText != null)
             {
-                activeItemDetailsText.text = $"Categoría: {category}  |  Trabajo: {work}  |  Costo: {res}{transformInfo}";
+                activeItemDetailsText.text = $"Category: {category}  |  Work: {work}  |  Cost: {res}{transformInfo}";
             }
 
             if (activeItemIcon != null)
@@ -604,7 +536,7 @@ namespace TMBS.UI
                 int count = all != null ? all.Count : 0;
 
                 if (pendingCountText != null)
-                    pendingCountText.text = $"⛏ Órdenes pendientes: {count}";
+                    pendingCountText.text = $"Pending orders: {count}";
 
                 if (pendingPanel != null)
                     pendingPanel.SetActive(count > 0);
@@ -615,10 +547,6 @@ namespace TMBS.UI
                     pendingPanel.SetActive(false);
             }
         }
-
-        #endregion
-
-        #region Actions & Controls
 
         private void HookButtons()
         {
@@ -647,19 +575,12 @@ namespace TMBS.UI
 
             if (buildeableTilemap.RootConfig?.history != null && !buildeableTilemap.RootConfig.history.enableUndoRedo)
             {
-                ShowToast("Deshacer/Rehacer desactivado en configuración.");
+                ShowToast("Undo/Redo is disabled.");
                 return;
             }
 
             bool success = buildeableTilemap.Undo();
-            if (success)
-            {
-                ShowToast("↺ Deshacer completado.");
-            }
-            else
-            {
-                ShowToast("Nada que deshacer.");
-            }
+            ShowToast(success ? "Undo" : "Nothing to undo.");
         }
 
         public void OnRedoClicked()
@@ -668,19 +589,12 @@ namespace TMBS.UI
 
             if (buildeableTilemap.RootConfig?.history != null && !buildeableTilemap.RootConfig.history.enableUndoRedo)
             {
-                ShowToast("Deshacer/Rehacer desactivado en configuración.");
+                ShowToast("Undo/Redo is disabled.");
                 return;
             }
 
             bool success = buildeableTilemap.Redo();
-            if (success)
-            {
-                ShowToast("↻ Rehacer completado.");
-            }
-            else
-            {
-                ShowToast("Nada que rehacer.");
-            }
+            ShowToast(success ? "Redo" : "Nothing to redo.");
         }
 
         public void OnClearClicked()
@@ -692,44 +606,18 @@ namespace TMBS.UI
             }
             HighlightSlot(null);
             RefreshActiveItemDisplay(null, null);
-            ShowToast("Selección desmarcada (Modo navegación).");
+            ShowToast("Selection cleared.");
         }
 
-        private void HandleKeyboardShortcuts()
+        private void HandlePaletteHotkeys()
         {
 #if ENABLE_INPUT_SYSTEM
             var keyboard = Keyboard.current;
             if (keyboard != null)
             {
-                if (keyboard.zKey.wasPressedThisFrame)
-                {
-                    OnUndoClicked();
-                    return;
-                }
-                if (keyboard.yKey.wasPressedThisFrame)
-                {
-                    OnRedoClicked();
-                    return;
-                }
-                if (keyboard.escapeKey.wasPressedThisFrame)
-                {
-                    OnClearClicked();
-                    return;
-                }
-
-                // Digit keys 1-9
-                Key[] digitKeys = {
-                    Key.Digit1, Key.Digit2, Key.Digit3, Key.Digit4, Key.Digit5,
-                    Key.Digit6, Key.Digit7, Key.Digit8, Key.Digit9
-                };
-                Key[] numpadKeys = {
-                    Key.Numpad1, Key.Numpad2, Key.Numpad3, Key.Numpad4, Key.Numpad5,
-                    Key.Numpad6, Key.Numpad7, Key.Numpad8, Key.Numpad9
-                };
-
                 for (int i = 0; i < 9 && i < _instantiatedSlots.Count; i++)
                 {
-                    if (keyboard[digitKeys[i]].wasPressedThisFrame || keyboard[numpadKeys[i]].wasPressedThisFrame)
+                    if (keyboard[DigitKeys[i]].wasPressedThisFrame || keyboard[NumpadKeys[i]].wasPressedThisFrame)
                     {
                         OnSlotClicked(_instantiatedSlots[i]);
                         return;
@@ -738,35 +626,17 @@ namespace TMBS.UI
                 return;
             }
 #endif
-            // Legacy Input fallback
-            if (Input.GetKeyDown(KeyCode.Z))
+#if ENABLE_LEGACY_INPUT_MANAGER
+            for (int i = 0; i < 9 && i < _instantiatedSlots.Count; i++)
             {
-                OnUndoClicked();
-            }
-            else if (Input.GetKeyDown(KeyCode.Y))
-            {
-                OnRedoClicked();
-            }
-            else if (Input.GetKeyDown(KeyCode.Escape))
-            {
-                OnClearClicked();
-            }
-            else
-            {
-                for (int i = 0; i < 9 && i < _instantiatedSlots.Count; i++)
+                if (Input.GetKeyDown(KeyCode.Alpha1 + i) || Input.GetKeyDown(KeyCode.Keypad1 + i))
                 {
-                    if (Input.GetKeyDown(KeyCode.Alpha1 + i) || Input.GetKeyDown(KeyCode.Keypad1 + i))
-                    {
-                        OnSlotClicked(_instantiatedSlots[i]);
-                        break;
-                    }
+                    OnSlotClicked(_instantiatedSlots[i]);
+                    break;
                 }
             }
+#endif
         }
-
-        #endregion
-
-        #region Helpers & Auto-Discovery
 
         private void EnsureEventSystemExists()
         {
@@ -780,239 +650,5 @@ namespace TMBS.UI
                 new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
             }
         }
-
-        private void DiscoverDefaultBuildables()
-        {
-#if UNITY_EDITOR
-            var guids = UnityEditor.AssetDatabase.FindAssets("t:TmbsBuildableData");
-            foreach (var guid in guids)
-            {
-                var path = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
-                var asset = UnityEditor.AssetDatabase.LoadAssetAtPath<TmbsBuildableData>(path);
-                if (asset != null && asset.tile != null && !buildables.Contains(asset))
-                {
-                    buildables.Add(asset);
-                }
-            }
-#else
-            var loaded = Resources.FindObjectsOfTypeAll<TmbsBuildableData>();
-            if (loaded != null)
-            {
-                foreach (var asset in loaded)
-                {
-                    if (asset != null && asset.tile != null && !buildables.Contains(asset))
-                    {
-                        buildables.Add(asset);
-                    }
-                }
-            }
-#endif
-        }
-
-        /// <summary>
-        /// Procedurally constructs a complete UI hierarchy if not loaded from a prefab.
-        /// </summary>
-        private void BuildProceduralLayoutIfNeeded()
-        {
-            var canvas = GetComponentInParent<Canvas>();
-            if (canvas == null)
-            {
-                var canvasObj = new GameObject("TMBS_Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-                canvas = canvasObj.GetComponent<Canvas>();
-                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-                var scaler = canvasObj.GetComponent<CanvasScaler>();
-                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-                scaler.referenceResolution = new Vector2(1920, 1080);
-                scaler.matchWidthOrHeight = 0.5f;
-                transform.SetParent(canvasObj.transform, false);
-            }
-
-            var rootRt = GetComponent<RectTransform>();
-            if (rootRt == null)
-                rootRt = gameObject.AddComponent<RectTransform>();
-
-            rootRt.anchorMin = Vector2.zero;
-            rootRt.anchorMax = Vector2.one;
-            rootRt.sizeDelta = Vector2.zero;
-
-            Font defaultFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (defaultFont == null) defaultFont = Font.CreateDynamicFontFromOSFont("Arial", 14);
-
-            // 1. Top HUD Panel
-            if (activeItemPanel == null)
-            {
-                activeItemPanel = CreateUiPanel("TopHUD_Panel", rootRt,
-                    new Vector2(0f, 1f), new Vector2(1f, 1f),
-                    new Vector2(0.5f, 1f), new Vector2(0f, 0f), new Vector2(0f, 75f),
-                    new Color(0.08f, 0.11f, 0.16f, 0.94f));
-
-                CreateUiText("Title", activeItemPanel.transform, "SISTEMA DE CONSTRUCCIÓN TMBS",
-                    16, FontStyle.Bold, TextAnchor.MiddleLeft, new Color(0.2f, 0.85f, 1f, 1f),
-                    new Vector2(0.02f, 0.52f), new Vector2(0.35f, 0.95f), Vector2.zero);
-
-                // Active icon
-                var iconObj = new GameObject("ActiveIcon", typeof(RectTransform), typeof(Image));
-                iconObj.transform.SetParent(activeItemPanel.transform, false);
-                var iconRt = iconObj.GetComponent<RectTransform>();
-                iconRt.anchorMin = new Vector2(0.02f, 0.1f);
-                iconRt.anchorMax = new Vector2(0.02f, 0.1f);
-                iconRt.pivot = new Vector2(0.5f, 0.5f);
-                iconRt.anchoredPosition = new Vector2(14f, 14f);
-                iconRt.sizeDelta = new Vector2(28f, 28f);
-                activeItemIcon = iconObj.GetComponent<Image>();
-                activeItemIcon.preserveAspect = true;
-                activeItemIcon.raycastTarget = false;
-
-                activeItemNameText = CreateUiText("ItemName", activeItemPanel.transform, "Construyendo: Ninguno",
-                    13, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white,
-                    new Vector2(0.045f, 0.1f), new Vector2(0.35f, 0.5f), Vector2.zero);
-
-                activeItemDetailsText = CreateUiText("ItemDetails", activeItemPanel.transform, "Selecciona un bloque para comenzar",
-                    12, FontStyle.Italic, TextAnchor.MiddleLeft, new Color(0.75f, 0.8f, 0.88f, 0.95f),
-                    new Vector2(0.32f, 0.1f), new Vector2(0.65f, 0.5f), Vector2.zero);
-
-                // Pending construction status badge
-                pendingPanel = CreateUiPanel("PendingOrders_Panel", activeItemPanel.transform,
-                    new Vector2(0.5f, 0.52f), new Vector2(0.66f, 0.95f), new Vector2(0.5f, 0.5f),
-                    Vector2.zero, Vector2.zero, new Color(0.25f, 0.2f, 0.05f, 0.9f));
-                pendingCountText = CreateUiText("PendingCount", pendingPanel.transform, "⛏ Órdenes: 0",
-                    12, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(1f, 0.85f, 0.3f, 1f),
-                    Vector2.zero, Vector2.one, Vector2.zero);
-                pendingPanel.SetActive(false);
-
-                // Header buttons
-                undoButton = CreateUiButton("BtnUndo", activeItemPanel.transform, "↺ Deshacer [Z]",
-                    new Vector2(0.68f, 0.2f), new Vector2(0.77f, 0.8f), new Color(0.18f, 0.32f, 0.48f, 1f));
-
-                redoButton = CreateUiButton("BtnRedo", activeItemPanel.transform, "↻ Rehacer [Y]",
-                    new Vector2(0.78f, 0.2f), new Vector2(0.87f, 0.8f), new Color(0.18f, 0.32f, 0.48f, 1f));
-
-                clearButton = CreateUiButton("BtnClear", activeItemPanel.transform, "✖ Deseleccionar [Esc]",
-                    new Vector2(0.88f, 0.2f), new Vector2(0.98f, 0.8f), new Color(0.48f, 0.18f, 0.24f, 1f));
-            }
-
-            // 2. Bottom Palette Panel
-            if (paletteContainer == null)
-            {
-                var bottomPanel = CreateUiPanel("BottomPalette_Panel", rootRt,
-                    new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
-                    new Vector2(0.5f, 0f), new Vector2(0f, 20f), new Vector2(900f, 140f),
-                    new Color(0.08f, 0.11f, 0.16f, 0.95f));
-
-                CreateUiText("PaletteHeader", bottomPanel.transform, "CATÁLOGO DE CONSTRUCCIÓN  (Acceso rápido: Teclas 1 a 9)",
-                    12, FontStyle.Bold, TextAnchor.UpperLeft, new Color(0.4f, 0.8f, 1f, 0.9f),
-                    new Vector2(0.02f, 0.82f), new Vector2(0.98f, 0.98f), Vector2.zero);
-
-                // Category tabs container
-                var tabsObj = new GameObject("CategoryTabs_Container", typeof(RectTransform), typeof(HorizontalLayoutGroup));
-                tabsObj.transform.SetParent(bottomPanel.transform, false);
-                var tabsRt = tabsObj.GetComponent<RectTransform>();
-                tabsRt.anchorMin = new Vector2(0.02f, 0.64f);
-                tabsRt.anchorMax = new Vector2(0.98f, 0.82f);
-                tabsRt.sizeDelta = Vector2.zero;
-                var tabsLayout = tabsObj.GetComponent<HorizontalLayoutGroup>();
-                tabsLayout.spacing = 8;
-                tabsLayout.childAlignment = TextAnchor.MiddleLeft;
-                tabsLayout.childForceExpandHeight = true;
-                tabsLayout.childForceExpandWidth = false;
-                categoryTabsContainer = tabsObj.transform;
-
-                // Slots container
-                var slotsContainerObj = new GameObject("SlotsContainer", typeof(RectTransform), typeof(HorizontalLayoutGroup));
-                slotsContainerObj.transform.SetParent(bottomPanel.transform, false);
-                var slotsRt = slotsContainerObj.GetComponent<RectTransform>();
-                slotsRt.anchorMin = new Vector2(0.02f, 0.06f);
-                slotsRt.anchorMax = new Vector2(0.98f, 0.62f);
-                slotsRt.sizeDelta = Vector2.zero;
-
-                var layout = slotsContainerObj.GetComponent<HorizontalLayoutGroup>();
-                layout.spacing = 12;
-                layout.childAlignment = TextAnchor.MiddleLeft;
-                layout.childForceExpandHeight = true;
-                layout.childForceExpandWidth = false;
-
-                paletteContainer = slotsContainerObj.transform;
-            }
-
-            // 3. Validation Toast Panel
-            if (toastPanel == null)
-            {
-                toastPanel = CreateUiPanel("ValidationToast_Panel", rootRt,
-                    new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                    new Vector2(0.5f, 0.5f), new Vector2(0f, -140f), new Vector2(520f, 50f),
-                    new Color(0.65f, 0.15f, 0.18f, 0.95f));
-
-                toastText = CreateUiText("ToastMessage", toastPanel.transform, "Aviso de validación",
-                    14, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white,
-                    Vector2.zero, Vector2.one, Vector2.zero);
-
-                toastPanel.SetActive(false);
-            }
-        }
-
-        private GameObject CreateUiPanel(string name, Transform parent, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 anchoredPos, Vector2 sizeDelta, Color color)
-        {
-            var panel = new GameObject(name, typeof(RectTransform), typeof(Image));
-            panel.transform.SetParent(parent, false);
-            var rt = panel.GetComponent<RectTransform>();
-            rt.anchorMin = anchorMin;
-            rt.anchorMax = anchorMax;
-            rt.pivot = pivot;
-            rt.anchoredPosition = anchoredPos;
-            rt.sizeDelta = sizeDelta;
-
-            var img = panel.GetComponent<Image>();
-            img.color = color;
-            img.raycastTarget = true;
-            return panel;
-        }
-
-        private Text CreateUiText(string name, Transform parent, string content, int fontSize, FontStyle style, TextAnchor align, Color color, Vector2 anchorMin, Vector2 anchorMax, Vector2 offset)
-        {
-            var textObj = new GameObject(name, typeof(RectTransform), typeof(Text));
-            textObj.transform.SetParent(parent, false);
-            var rt = textObj.GetComponent<RectTransform>();
-            rt.anchorMin = anchorMin;
-            rt.anchorMax = anchorMax;
-            rt.offsetMin = offset;
-            rt.offsetMax = Vector2.zero;
-
-            var txt = textObj.GetComponent<Text>();
-            txt.text = content;
-            txt.fontSize = fontSize;
-            txt.fontStyle = style;
-            txt.alignment = align;
-            txt.color = color;
-            txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", fontSize);
-            txt.raycastTarget = false;
-            return txt;
-        }
-
-        private Button CreateUiButton(string name, Transform parent, string text, Vector2 anchorMin, Vector2 anchorMax, Color btnColor)
-        {
-            var btnObj = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
-            btnObj.transform.SetParent(parent, false);
-            var rt = btnObj.GetComponent<RectTransform>();
-            rt.anchorMin = anchorMin;
-            rt.anchorMax = anchorMax;
-            rt.offsetMin = new Vector2(4, 4);
-            rt.offsetMax = new Vector2(-4, -4);
-
-            var img = btnObj.GetComponent<Image>();
-            img.color = btnColor;
-            img.raycastTarget = true;
-
-            var btn = btnObj.GetComponent<Button>();
-            var colors = btn.colors;
-            colors.highlightedColor = btnColor * 1.25f;
-            colors.pressedColor = btnColor * 0.75f;
-            btn.colors = colors;
-
-            CreateUiText("Label", btnObj.transform, text, 12, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, Vector2.one, Vector2.zero);
-            return btn;
-        }
-
-        #endregion
     }
 }

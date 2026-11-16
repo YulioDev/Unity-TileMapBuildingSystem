@@ -10,11 +10,7 @@ using UnityEngine.InputSystem;
 
 namespace TMBS.Runtime.Debugging
 {
-    /// <summary>
-    /// Interactive IMGUI-based debugging overlay for TMBS.
-    /// Provides real-time metrics, live execution mode toggling, manual progress stepping,
-    /// auto-ticker worker simulation, and detailed pending order inspection.
-    /// </summary>
+    /// <summary>IMGUI overlay for inspecting and stepping TMBS pending construction orders.</summary>
     [DisallowMultipleComponent]
     public sealed class TmbsDebugMenu : MonoBehaviour
     {
@@ -38,6 +34,11 @@ namespace TMBS.Runtime.Debugging
         private int _manualResourceAmount = 1;
         private bool _tickerDeliverResources = true;
         private bool _pauseSimulation = false;
+
+        private PendingDebugBuilder _autoWorkerBuilder;
+        private TmbsPendingDebugConfig _autoWorkerConfig;
+        private IPendingWorkApi _autoWorkerWorkApi;
+        private ResourceRequirement _autoWorkerPolicy;
 
         // GUI Styles
         private GUIStyle _headerStyle;
@@ -84,6 +85,8 @@ namespace TMBS.Runtime.Debugging
         private void OnDisable()
         {
             IsPointerOverAnyMenu = false;
+            _autoWorkerBuilder = null;
+            _autoWorkerWorkApi = null;
             if (_pauseSimulation)
             {
                 Time.timeScale = 1f;
@@ -103,12 +106,14 @@ namespace TMBS.Runtime.Debugging
 
         private void Awake()
         {
+            TMBS.Unity.Input.UiFocusGuard.IsPointerBlockedByOverlay = () => IsPointerOverAnyMenu;
             ResolveBuildeableTilemap();
             SyncWithConfig();
         }
 
         private void OnEnable()
         {
+            TMBS.Unity.Input.UiFocusGuard.IsPointerBlockedByOverlay = () => IsPointerOverAnyMenu;
             ResolveBuildeableTilemap();
             SyncWithConfig();
         }
@@ -289,55 +294,28 @@ namespace TMBS.Runtime.Debugging
             var workApi = buildeableTilemap.PendingWorkApi;
             if (workApi == null) return;
 
-            var all = workApi.GetAll();
-            if (all == null || all.Count == 0) return;
-
             var policy = GetResourcePolicy();
 
-            for (int o = 0; o < all.Count; o++)
+            if (_autoWorkerConfig == null)
             {
-                var order = all[o];
-                if (order == null || order.Cells == null) continue;
-
-                var cells = order.Cells;
-                for (int c = 0; c < cells.Length; c++)
-                {
-                    var cell = cells[c];
-                    if (cell.IsCompleted) continue;
-
-                    int allowedWork = cell.WorkAllowed(policy);
-
-                    if (_tickerDeliverResources && cell.ResourceDelivered < cell.ResourceRequired && cell.WorkDone >= allowedWork)
-                    {
-                        int needed = cell.ResourceRequired - cell.ResourceDelivered;
-                        int deliver = Mathf.Min(needed, _manualResourceAmount);
-                        if (deliver > 0)
-                        {
-                            workApi.TryDeliverResources(cell.Cell, deliver);
-                            return;
-                        }
-                    }
-
-                    if (cell.WorkDone < allowedWork)
-                    {
-                        int remainingWork = allowedWork - cell.WorkDone;
-                        int workToAdd = Mathf.Min(remainingWork, _manualWorkAmount);
-                        workApi.TryAddWork(cell.Cell, workToAdd);
-
-                        if (workApi.TryGetCellStatus(cell.Cell, out var updated) && updated.IsWorkComplete)
-                        {
-                            workApi.TryCompleteCell(cell.Cell);
-                        }
-                        return;
-                    }
-
-                    if (cell.IsWorkComplete && !cell.IsCompleted)
-                    {
-                        if (workApi.TryCompleteCell(cell.Cell))
-                            return;
-                    }
-                }
+                _autoWorkerConfig = new TmbsPendingDebugConfig();
             }
+
+            _autoWorkerConfig.enabled = true;
+            _autoWorkerConfig.workPerStep = Mathf.Max(1, _manualWorkAmount);
+            _autoWorkerConfig.cellsPerStep = 1;
+            _autoWorkerConfig.autoDeliverResources = _tickerDeliverResources;
+
+            if (_autoWorkerBuilder == null ||
+                !ReferenceEquals(_autoWorkerWorkApi, workApi) ||
+                _autoWorkerPolicy != policy)
+            {
+                _autoWorkerWorkApi = workApi;
+                _autoWorkerPolicy = policy;
+                _autoWorkerBuilder = new PendingDebugBuilder(workApi, _autoWorkerConfig, policy);
+            }
+
+            _autoWorkerBuilder.Step();
         }
 
         private void OnGUI()
@@ -461,17 +439,17 @@ namespace TMBS.Runtime.Debugging
         {
             // Title Bar Controls
             GUILayout.BeginHorizontal();
-            GUILayout.Label("Herramientas de Construcción y Pendientes", _headerStyle);
+            GUILayout.Label("Build & Pending Tools", _headerStyle);
             GUILayout.FlexibleSpace();
 
             bool prevPause = _pauseSimulation;
-            _pauseSimulation = GUILayout.Toggle(_pauseSimulation, "Pausa", GUILayout.Width(60));
+            _pauseSimulation = GUILayout.Toggle(_pauseSimulation, "Pause", GUILayout.Width(60));
             if (_pauseSimulation != prevPause)
             {
                 Time.timeScale = _pauseSimulation ? 0f : 1f;
             }
 
-            if (GUILayout.Button("✕", GUILayout.Width(26), GUILayout.Height(20)))
+            if (GUILayout.Button("X", GUILayout.Width(26), GUILayout.Height(20)))
             {
                 Close();
             }
@@ -511,11 +489,11 @@ namespace TMBS.Runtime.Debugging
                 ? buildeableTilemap.RootConfig.executionMode
                 : ExecutionMode.Immediate;
 
-            GUILayout.Label("Modo de Ejecución:", _subHeaderStyle, GUILayout.Width(130));
+            GUILayout.Label("Execution Mode:", _subHeaderStyle, GUILayout.Width(130));
 
             string modeText = currentMode == ExecutionMode.Immediate
-                ? "<color=#55ff88>INMEDIATO (Directo al Tilemap)</color>"
-                : "<color=#55ccff>PENDIENTE (Órdenes Diferidas)</color>";
+                ? "<color=#55ff88>IMMEDIATE (Direct)</color>"
+                : "<color=#55ccff>PENDING (Deferred)</color>";
 
             var richLabel = new GUIStyle(GUI.skin.label) { richText = true, fontStyle = FontStyle.Bold };
             GUILayout.Label(modeText, richLabel);
@@ -523,8 +501,8 @@ namespace TMBS.Runtime.Debugging
             GUILayout.FlexibleSpace();
 
             string buttonText = currentMode == ExecutionMode.Immediate
-                ? "Cambiar a PENDING"
-                : "Cambiar a IMMEDIATE";
+                ? "Switch to PENDING"
+                : "Switch to IMMEDIATE";
 
             var origBg = GUI.backgroundColor;
             GUI.backgroundColor = currentMode == ExecutionMode.Immediate
@@ -550,7 +528,7 @@ namespace TMBS.Runtime.Debugging
         private void DrawMetricsSection()
         {
             GUILayout.BeginVertical(GUI.skin.box);
-            GUILayout.Label("Métricas Globales", _subHeaderStyle);
+            GUILayout.Label("Global Metrics", _subHeaderStyle);
 
             var workApi = buildeableTilemap != null ? buildeableTilemap.PendingWorkApi : null;
             var orders = workApi != null ? workApi.GetAll() : null;
@@ -606,19 +584,19 @@ namespace TMBS.Runtime.Debugging
             }
 
             GUILayout.BeginHorizontal();
-            DrawMetricItem("Órdenes:", orderCount.ToString());
-            DrawMetricItem("Celdas:", totalCells.ToString());
-            DrawMetricItem("Completadas:", completedCells.ToString());
-            DrawMetricItem("En Espera:", waitingCells.ToString());
-            DrawMetricItem("Listas:", readyCells.ToString());
-            DrawMetricItem("En Curso:", inProgressCells.ToString());
+            DrawMetricItem("Orders:", orderCount.ToString());
+            DrawMetricItem("Cells:", totalCells.ToString());
+            DrawMetricItem("Completed:", completedCells.ToString());
+            DrawMetricItem("Waiting:", waitingCells.ToString());
+            DrawMetricItem("Ready:", readyCells.ToString());
+            DrawMetricItem("In Progress:", inProgressCells.ToString());
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
-            DrawMetricItem("Progreso Trabajo:", $"{totalWorkDone}/{totalWorkReq}");
-            DrawMetricItem("Recursos Entregados:", $"{totalResDelivered}/{totalResReq}");
+            DrawMetricItem("Work Progress:", $"{totalWorkDone}/{totalWorkReq}");
+            DrawMetricItem("Resources:", $"{totalResDelivered}/{totalResReq}");
             float overallProgress = totalWorkReq > 0 ? (float)totalWorkDone / totalWorkReq : 0f;
-            DrawMetricItem("Avance Global:", $"{Mathf.RoundToInt(overallProgress * 100f)}%");
+            DrawMetricItem("Overall:", $"{Mathf.RoundToInt(overallProgress * 100f)}%");
             GUILayout.EndHorizontal();
 
             DrawProgressBar(overallProgress, 14);
@@ -638,7 +616,7 @@ namespace TMBS.Runtime.Debugging
         private void DrawQuickActionsSection()
         {
             GUILayout.BeginVertical(GUI.skin.box);
-            GUILayout.Label("Acciones Rápidas", _subHeaderStyle);
+            GUILayout.Label("Quick Actions", _subHeaderStyle);
 
             var workApi = buildeableTilemap != null ? buildeableTilemap.PendingWorkApi : null;
             bool hasOrders = workApi != null && workApi.GetAll() != null && workApi.GetAll().Count > 0;
@@ -646,33 +624,33 @@ namespace TMBS.Runtime.Debugging
             GUI.enabled = hasOrders;
 
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button($"+1 Trabajo", GUILayout.Height(24)))
+            if (GUILayout.Button("+1 Work", GUILayout.Height(24)))
             {
                 AdvanceAllWork(1);
             }
-            if (GUILayout.Button($"+{_manualWorkAmount} Trabajo", GUILayout.Height(24)))
+            if (GUILayout.Button($"+{_manualWorkAmount} Work", GUILayout.Height(24)))
             {
                 AdvanceAllWork(_manualWorkAmount);
             }
-            if (GUILayout.Button("Entregar Recursos", GUILayout.Height(24)))
+            if (GUILayout.Button("Deliver Resources", GUILayout.Height(24)))
             {
                 DeliverAllNeededResources();
             }
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Completar Siguiente Celda", GUILayout.Height(24)))
+            if (GUILayout.Button("Complete Next Cell", GUILayout.Height(24)))
             {
                 CompleteNextCell();
             }
             var origColor = GUI.backgroundColor;
             GUI.backgroundColor = new Color(0.2f, 0.75f, 0.35f);
-            if (GUILayout.Button("Completar Todo", GUILayout.Height(24)))
+            if (GUILayout.Button("Complete All", GUILayout.Height(24)))
             {
                 CompleteAllPending();
             }
             GUI.backgroundColor = new Color(0.9f, 0.3f, 0.3f);
-            if (GUILayout.Button("Cancelar Todas", GUILayout.Height(24)))
+            if (GUILayout.Button("Cancel All", GUILayout.Height(24)))
             {
                 CancelAllPending();
             }
@@ -687,17 +665,17 @@ namespace TMBS.Runtime.Debugging
         {
             GUILayout.BeginVertical(GUI.skin.box);
             GUILayout.BeginHorizontal();
-            _autoTickerEnabled = GUILayout.Toggle(_autoTickerEnabled, "Auto-Avance Continuo (Simular Trabajadores)", GUILayout.Width(270));
-            _tickerDeliverResources = GUILayout.Toggle(_tickerDeliverResources, "Auto-Entregar Recursos");
+            _autoTickerEnabled = GUILayout.Toggle(_autoTickerEnabled, "Auto-Step Worker", GUILayout.Width(180));
+            _tickerDeliverResources = GUILayout.Toggle(_tickerDeliverResources, "Auto-Deliver Resources");
             GUILayout.EndHorizontal();
 
             if (_autoTickerEnabled)
             {
                 GUILayout.BeginHorizontal();
-                GUILayout.Label($"Cadencia: {_tickerInterval:F2}s", GUILayout.Width(110));
+                GUILayout.Label($"Interval: {_tickerInterval:F2}s", GUILayout.Width(110));
                 _tickerInterval = GUILayout.HorizontalSlider(_tickerInterval, 0.05f, 1.0f);
                 GUILayout.Space(12);
-                GUILayout.Label($"Trabajo/Tick: {_manualWorkAmount}", GUILayout.Width(110));
+                GUILayout.Label($"Work/Tick: {_manualWorkAmount}", GUILayout.Width(110));
                 GUILayout.EndHorizontal();
             }
 
@@ -708,7 +686,7 @@ namespace TMBS.Runtime.Debugging
         {
             GUILayout.BeginVertical(GUI.skin.box);
             GUILayout.BeginHorizontal();
-            GUILayout.Label("Inspector de Órdenes Pendientes", _subHeaderStyle);
+            GUILayout.Label("Pending Orders Inspector", _subHeaderStyle);
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
 
@@ -720,7 +698,7 @@ namespace TMBS.Runtime.Debugging
             if (currentMode == ExecutionMode.Immediate)
             {
                 GUILayout.Space(12);
-                GUILayout.Label("El sistema se encuentra en modo INMEDIATO.\nLas piezas se colocan directamente en el tilemap sin crear órdenes pendientes.\nPara probar la cola de trabajo diferida, pulsa 'Cambiar a PENDING' en la barra superior.", _metricLabelStyle);
+                GUILayout.Label("System is in IMMEDIATE mode.\nTiles are placed directly onto the tilemap without creating pending orders.\nClick 'Switch to PENDING' above to test the deferred work queue.", _metricLabelStyle);
                 GUILayout.Space(12);
                 GUILayout.EndVertical();
                 return;
@@ -731,7 +709,7 @@ namespace TMBS.Runtime.Debugging
             if (orders == null || orders.Count == 0)
             {
                 GUILayout.Space(16);
-                GUILayout.Label("No hay órdenes pendientes activas en la cola.\nSelecciona un bloque de la paleta y arrastra sobre el mapa para crear nuevas órdenes.", _metricLabelStyle);
+                GUILayout.Label("No active pending orders in the queue.\nSelect a buildable from the palette and drag across the tilemap to create orders.", _metricLabelStyle);
                 GUILayout.Space(16);
                 GUILayout.EndVertical();
                 return;
@@ -759,7 +737,7 @@ namespace TMBS.Runtime.Debugging
             GUILayout.BeginHorizontal();
 
             // Order header & State badge
-            GUILayout.Label($"Orden #{order.Id}", EditorHeaderStyle(), GUILayout.Width(75));
+            GUILayout.Label($"Order #{order.Id}", EditorHeaderStyle(), GUILayout.Width(75));
 
             string stateName = order.State.ToString();
             GUIStyle badgeStyle = GetBadgeStyle(order.State);
@@ -775,7 +753,7 @@ namespace TMBS.Runtime.Debugging
 
             var origBg = GUI.backgroundColor;
             GUI.backgroundColor = new Color(0.9f, 0.4f, 0.4f);
-            if (GUILayout.Button("✕ Cancelar", GUILayout.Width(75), GUILayout.Height(18)))
+            if (GUILayout.Button("Cancel", GUILayout.Width(75), GUILayout.Height(18)))
             {
                 workApi.TryCancel(order.Id);
                 GUI.backgroundColor = origBg;
@@ -810,15 +788,15 @@ namespace TMBS.Runtime.Debugging
             GUILayout.BeginHorizontal();
 
             GUILayout.Label($"({cell.Cell.x}, {cell.Cell.y})", _metricLabelStyle, GUILayout.Width(65));
-            GUILayout.Label($"Trabajo: {cell.WorkDone}/{cell.WorkRequired}", _metricLabelStyle, GUILayout.Width(100));
+            GUILayout.Label($"Work: {cell.WorkDone}/{cell.WorkRequired}", _metricLabelStyle, GUILayout.Width(100));
 
             if (cell.ResourceRequired > 0)
             {
-                GUILayout.Label($"Recursos: {cell.ResourceDelivered}/{cell.ResourceRequired}", _metricLabelStyle, GUILayout.Width(110));
+                GUILayout.Label($"Resources: {cell.ResourceDelivered}/{cell.ResourceRequired}", _metricLabelStyle, GUILayout.Width(110));
             }
             else
             {
-                GUILayout.Label("Sin recursos", _metricLabelStyle, GUILayout.Width(110));
+                GUILayout.Label("No resources", _metricLabelStyle, GUILayout.Width(110));
             }
 
             GUILayout.FlexibleSpace();
@@ -832,14 +810,14 @@ namespace TMBS.Runtime.Debugging
                     alignment = TextAnchor.MiddleCenter,
                     normal = { textColor = new Color(0.2f, 1f, 0.4f) }
                 };
-                GUILayout.Box("Completado", greenBox, GUILayout.Width(80), GUILayout.Height(18));
+                GUILayout.Box("Completed", greenBox, GUILayout.Width(80), GUILayout.Height(18));
             }
             else
             {
                 var policy = GetResourcePolicy();
                 if (cell.ResourceDelivered < cell.ResourceRequired)
                 {
-                    if (GUILayout.Button("+ Recurso", GUILayout.Width(70), GUILayout.Height(18)))
+                    if (GUILayout.Button("+ Resource", GUILayout.Width(78), GUILayout.Height(18)))
                     {
                         int needed = cell.ResourceRequired - cell.ResourceDelivered;
                         workApi.TryDeliverResources(cell.Cell, Mathf.Min(needed, _manualResourceAmount));
@@ -847,7 +825,7 @@ namespace TMBS.Runtime.Debugging
                 }
                 if (cell.WorkDone < cell.WorkAllowed(policy))
                 {
-                    if (GUILayout.Button("+ Trabajo", GUILayout.Width(70), GUILayout.Height(18)))
+                    if (GUILayout.Button("+ Work", GUILayout.Width(70), GUILayout.Height(18)))
                     {
                         int allowed = cell.WorkAllowed(policy) - cell.WorkDone;
                         int toAdd = Mathf.Min(allowed, _manualWorkAmount);
@@ -859,7 +837,7 @@ namespace TMBS.Runtime.Debugging
                     }
                 }
 
-                if (GUILayout.Button("Completar", GUILayout.Width(70), GUILayout.Height(18)))
+                if (GUILayout.Button("Complete", GUILayout.Width(70), GUILayout.Height(18)))
                 {
                     if (cell.ResourceDelivered < cell.ResourceRequired)
                     {
@@ -919,8 +897,6 @@ namespace TMBS.Runtime.Debugging
                 GUI.color = origColor;
             }
         }
-
-        #region Operations
 
         public void AdvanceAllWork(int amount)
         {
@@ -1095,7 +1071,5 @@ namespace TMBS.Runtime.Debugging
                 workApi.TryCancel(ids[i]);
             }
         }
-
-        #endregion
     }
 }
