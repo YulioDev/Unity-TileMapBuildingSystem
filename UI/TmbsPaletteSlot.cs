@@ -7,7 +7,7 @@ using UnityEngine.Tilemaps;
 namespace TMBS.UI
 {
     /// <summary>
-    /// Represents a single selectable buildable or tile slot in the TMBS UI palette.
+    /// Palette slot representing a selectable buildable or tile.
     /// </summary>
     [DisallowMultipleComponent]
     public class TmbsPaletteSlot : MonoBehaviour
@@ -42,7 +42,7 @@ namespace TMBS.UI
         }
 
         /// <summary>
-        /// Configures this slot using a TmbsBuildableData ScriptableObject.
+        /// Configures this slot from a TmbsBuildableData asset.
         /// </summary>
         public void Setup(TmbsBuildableData data, Action<TmbsPaletteSlot> onSelected)
         {
@@ -89,7 +89,7 @@ namespace TMBS.UI
         }
 
         /// <summary>
-        /// Configures this slot directly from a TileBase (e.g. RuleTile or Tile).
+        /// Configures this slot from a TileBase asset.
         /// </summary>
         public void Setup(TileBase tile, string displayName, Sprite customIcon, string category, Action<TmbsPaletteSlot> onSelected)
         {
@@ -114,7 +114,7 @@ namespace TMBS.UI
         }
 
         /// <summary>
-        /// Resolves the preview sprite for any buildable data or tile asset (including RuleTiles and custom tiles).
+        /// Resolves the preview sprite for a buildable data or tile asset.
         /// </summary>
         public static Sprite ResolveSprite(TmbsBuildableData data, TileBase tile)
         {
@@ -150,17 +150,23 @@ namespace TMBS.UI
             if (string.IsNullOrEmpty(category)) return new Color(0.4f, 0.6f, 0.8f, 1f);
             switch (category.ToLowerInvariant())
             {
-                case "bloques": return new Color(0.2f, 0.7f, 1f, 1f);
-                case "estructura": return new Color(1f, 0.65f, 0.2f, 1f);
+                case "blocks": return new Color(0.2f, 0.7f, 1f, 1f);
+                case "hull": return new Color(0.35f, 0.65f, 0.9f, 1f);
+                case "armor": return new Color(0.55f, 0.7f, 0.85f, 1f);
+                case "structure": return new Color(1f, 0.65f, 0.2f, 1f);
                 case "tiles": return new Color(0.4f, 0.9f, 0.5f, 1f);
-                case "armas":
                 case "weapons": return new Color(1f, 0.3f, 0.3f, 1f);
+                case "utility": return new Color(0.95f, 0.8f, 0.25f, 1f);
+                case "engines": return new Color(1f, 0.45f, 0.2f, 1f);
+                case "cockpits": return new Color(0.3f, 0.85f, 0.85f, 1f);
+                case "connectors": return new Color(0.7f, 0.55f, 0.95f, 1f);
+                case "decorative": return new Color(0.85f, 0.55f, 0.8f, 1f);
                 default: return new Color(0.6f, 0.7f, 0.8f, 1f);
             }
         }
 
         /// <summary>
-        /// Toggles visual selection highlight on this slot.
+        /// Sets the selection highlight state on this slot.
         /// </summary>
         public void SetSelected(bool selected)
         {
@@ -199,7 +205,7 @@ namespace TMBS.UI
         }
 
         /// <summary>
-        /// Allows procedural construction of the slot UI elements if instantiated dynamically.
+        /// Assigns UI element references for dynamically instantiated slots.
         /// </summary>
         public void SetInternalReferences(Image icon, Text label, Image border, Button btn, Text costBadge = null)
         {

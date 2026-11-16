@@ -15,13 +15,13 @@ namespace TMBS.Editor
         private const string PrefabPath = "Assets/TMBS/UI/TmbsBuildingUI.prefab";
         private const string SlotPrefabPath = "Assets/TMBS/UI/TmbsPaletteSlot.prefab";
 
-        [MenuItem("Tools/TMBS/1. Configurar UI en Escena Actual", false, 100)]
+        [MenuItem("Tools/TMBS/1. Configure Scene UI", false, 100)]
         public static GameObject CreateOrUpdateSceneUI()
         {
             var buildeable = Object.FindAnyObjectByType<BuildeableTilemap>();
             if (buildeable == null)
             {
-                Debug.LogWarning("TMBS: No se encontró ningún 'BuildeableTilemap' en la escena activa.");
+                Debug.LogWarning("TMBS: No 'BuildeableTilemap' found in the active scene.");
             }
 
             EnsureEventSystem();
@@ -72,7 +72,7 @@ namespace TMBS.Editor
                 new Color(0.08f, 0.11f, 0.16f, 0.94f));
 
             // Title
-            CreateText("TitleText", topPanel.transform, "SISTEMA DE CONSTRUCCIÓN TMBS",
+            CreateText("TitleText", topPanel.transform, "TMBS BUILDING SYSTEM",
                 16, FontStyle.Bold, TextAnchor.MiddleLeft, new Color(0.2f, 0.85f, 1f, 1f),
                 new Vector2(0.02f, 0.52f), new Vector2(0.35f, 0.95f), Vector2.zero, defaultFont);
 
@@ -90,12 +90,12 @@ namespace TMBS.Editor
             activeIconImg.raycastTarget = false;
 
             // Active Item Name
-            var nameText = CreateText("ActiveItemName", topPanel.transform, "Construyendo: Ninguno",
+            var nameText = CreateText("ActiveItemName", topPanel.transform, "Building: None",
                 13, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white,
                 new Vector2(0.045f, 0.1f), new Vector2(0.35f, 0.5f), Vector2.zero, defaultFont);
 
             // Active Item Details
-            var detailsText = CreateText("ActiveItemDetails", topPanel.transform, "Selecciona un bloque de la paleta inferior para comenzar",
+            var detailsText = CreateText("ActiveItemDetails", topPanel.transform, "Select a buildable from the palette below",
                 12, FontStyle.Italic, TextAnchor.MiddleLeft, new Color(0.75f, 0.8f, 0.88f, 0.95f),
                 new Vector2(0.32f, 0.1f), new Vector2(0.65f, 0.5f), Vector2.zero, defaultFont);
 
@@ -103,19 +103,19 @@ namespace TMBS.Editor
             var pendingPanel = CreatePanel("PendingOrders_Panel", topPanel.transform,
                 new Vector2(0.5f, 0.52f), new Vector2(0.66f, 0.95f), new Vector2(0.5f, 0.5f),
                 Vector2.zero, Vector2.zero, new Color(0.25f, 0.2f, 0.05f, 0.9f));
-            var pendingCountText = CreateText("PendingOrders_Text", pendingPanel.transform, "⛏ Órdenes pendientes: 0",
+            var pendingCountText = CreateText("PendingOrders_Text", pendingPanel.transform, "Pending orders: 0",
                 12, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(1f, 0.85f, 0.3f, 1f),
                 Vector2.zero, Vector2.one, Vector2.zero, defaultFont);
             pendingPanel.SetActive(false);
 
             // Action Buttons (Undo, Redo, Clear)
-            var undoBtn = CreateButton("BtnUndo", topPanel.transform, "↺ Deshacer [Z]",
+            var undoBtn = CreateButton("BtnUndo", topPanel.transform, "Undo [Ctrl+Z]",
                 new Vector2(0.68f, 0.2f), new Vector2(0.77f, 0.8f), new Color(0.18f, 0.32f, 0.48f, 1f), defaultFont);
 
-            var redoBtn = CreateButton("BtnRedo", topPanel.transform, "↻ Rehacer [Y]",
+            var redoBtn = CreateButton("BtnRedo", topPanel.transform, "Redo [Ctrl+Y]",
                 new Vector2(0.78f, 0.2f), new Vector2(0.87f, 0.8f), new Color(0.18f, 0.32f, 0.48f, 1f), defaultFont);
 
-            var clearBtn = CreateButton("BtnClear", topPanel.transform, "✖ Deseleccionar [Esc]",
+            var clearBtn = CreateButton("BtnClear", topPanel.transform, "Clear [Esc]",
                 new Vector2(0.88f, 0.2f), new Vector2(0.98f, 0.8f), new Color(0.48f, 0.18f, 0.24f, 1f), defaultFont);
 
             // 2. Bottom Palette Panel
@@ -124,7 +124,7 @@ namespace TMBS.Editor
                 new Vector2(0f, 20f), new Vector2(900f, 140f),
                 new Color(0.08f, 0.11f, 0.16f, 0.95f));
 
-            CreateText("PaletteTitle", bottomPanel.transform, "CATÁLOGO DE CONSTRUCCIÓN  (Acceso rápido: Teclas 1 a 9)",
+            CreateText("PaletteTitle", bottomPanel.transform, "BUILD CATALOG  (Hotkeys: 1-9)",
                 12, FontStyle.Bold, TextAnchor.UpperLeft, new Color(0.4f, 0.8f, 1f, 0.9f),
                 new Vector2(0.02f, 0.82f), new Vector2(0.98f, 0.98f), Vector2.zero, defaultFont);
 
@@ -162,7 +162,7 @@ namespace TMBS.Editor
                 new Vector2(0f, -140f), new Vector2(520f, 50f),
                 new Color(0.65f, 0.15f, 0.18f, 0.95f));
 
-            var toastText = CreateText("ToastMessage", toastPanel.transform, "Aviso de validación",
+            var toastText = CreateText("ToastMessage", toastPanel.transform, "Validation notice",
                 14, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white,
                 Vector2.zero, Vector2.one, Vector2.zero, defaultFont);
 
@@ -214,12 +214,12 @@ namespace TMBS.Editor
 
             // Mark Scene Dirty
             EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
-            Debug.Log($"TMBS: UI configurada con éxito en la escena con {foundBuildables.Count} bloques disponibles.");
+            Debug.Log($"TMBS: Scene UI configured with {foundBuildables.Count} available buildables.");
 
             return canvasObj;
         }
 
-        [MenuItem("Tools/TMBS/2. Guardar UI como Prefab", false, 101)]
+        [MenuItem("Tools/TMBS/2. Save UI as Prefab", false, 101)]
         public static void SaveAsPrefab()
         {
             var canvasObj = GameObject.Find("TMBS_Canvas");
@@ -258,7 +258,7 @@ namespace TMBS.Editor
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
-            Debug.Log($"TMBS: UI guardada exitosamente como prefab en: {PrefabPath}");
+            Debug.Log($"TMBS: UI prefab saved at: {PrefabPath}");
         }
 
         private static void EnsureEventSystem()

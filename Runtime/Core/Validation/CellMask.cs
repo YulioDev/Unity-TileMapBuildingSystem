@@ -4,10 +4,6 @@ using UnityEngine;
 
 namespace TMBS.Core.Validation
 {
-    
-    
-    
-    
     public sealed class CellMask
     {
         public BoundsInt Bounds { get; private set; }

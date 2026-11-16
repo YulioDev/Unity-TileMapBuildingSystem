@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using TMBS.Runtime.Config;
 using TMBS.Core.Preview;
 using UnityEngine;
 using UnityEngine.Tilemaps;
@@ -22,7 +21,7 @@ namespace TMBS.Runtime.Config
         public TmbsCameraMode cameraMode = TmbsCameraMode.AlwaysMainCamera;
 
         [Header("Preview")]
-        [Tooltip("Determines when the build preview is visible (Always, Never, or ModeBased).")]
+        [Tooltip("Determines when the build preview is visible (SoftOff, StrictOff, or AlwaysOn).")]
         public PreviewPolicy previewPolicy = PreviewPolicy.AlwaysOn;
 
         [Tooltip("Colors used for the preview overlay. The build tile is tinted with these colors to indicate validity.")]

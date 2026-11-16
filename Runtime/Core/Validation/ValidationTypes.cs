@@ -19,10 +19,6 @@ namespace TMBS.Core.Validation
 
     public readonly struct ValidationFeedback
     {
-        
-        
-        
-        
         public readonly CellMask BlockedMask;
 
         public ValidationFeedback(CellMask blockedMask)
@@ -37,16 +33,7 @@ namespace TMBS.Core.Validation
     {
         public readonly bool IsValid;
         public readonly ValidationFailure Failure;
-
-        
-        
-        
         public readonly ValidationFeedback Feedback;
-
-        
-        
-        
-        
         public readonly CellMask WriteMask;
 
         public ValidationResult(bool isValid, ValidationFailure failure, ValidationFeedback feedback, CellMask writeMask)

@@ -15,8 +15,6 @@ namespace TMBS.Runtime.Config
             "InputActions: Uses Unity's Input System package with configurable InputActionReferences.")]
         public TmbsInputMode mode = TmbsInputMode.Legacy;
 
-        // ── Input Actions ──
-
 #if ENABLE_INPUT_SYSTEM
         [Tooltip("Action that provides the pointer screen position (Value, Vector2).")]
         public InputActionReference pointAction;
@@ -42,8 +40,6 @@ namespace TMBS.Runtime.Config
         [Tooltip("Button action for Mirror.")]
         public InputActionReference mirrorAction;
 #endif
-
-        // ── Capability validation ──
 
         [Tooltip("If enabled, build actions will be blocked if the input adapter does not meet all required capabilities.")]
         public bool strictInputValidation = false;

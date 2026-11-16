@@ -4,7 +4,7 @@ namespace TMBS.Core.Selection
 {
     public struct PlacementTransform
     {
-        public int Rotation;   // 0..3, pasos de 90°
+        public int Rotation;   // 0..3 (90-degree steps)
         public bool Mirrored;
 
         public PlacementTransform(int rotation, bool mirrored)

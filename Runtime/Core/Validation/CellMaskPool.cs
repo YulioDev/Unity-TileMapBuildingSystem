@@ -24,10 +24,7 @@ namespace TMBS.Core.Validation
             return mask;
         }
 
-        /// <summary>
-        /// Call this once per frame (e.g., in BuildeableTilemap.Update) to return all 
-        /// rented masks to the pool. This avoids the need for complex lifetime tracking.
-        /// </summary>
+        /// <summary>Returns all rented masks to the pool. Call once per frame.</summary>
         public static void ReclaimAll()
         {
             for (int i = 0; i < _activeMasks.Count; i++)

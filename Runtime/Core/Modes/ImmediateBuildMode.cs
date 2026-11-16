@@ -11,8 +11,6 @@ namespace TMBS.Core.Modes
 
         public PipelineContext Interpret(in BuildIntent intent, in PipelineContext ctx)
         {
-            
-            
             if (intent.AlternateBehaviour)
             {
                 ctx.SelectedTile = null;
