@@ -51,6 +51,28 @@ namespace TMBS.Core.Execution
         public static ExecutionDecision Pending(TileBase tile, CellMask writeMask = null, UnityEngine.Matrix4x4 transformMatrix = default) =>
             new ExecutionDecision(ExecutionResult.PendingOrder, tile, null, writeMask, 1, transformMatrix);
 
+        public static ExecutionDecision FromValidation(in TMBS.Core.Pipeline.PipelineContext ctx, ExecutionResult resultType)
+        {
+            if (!ctx.FullValidation.IsValid)
+            {
+                return Reject;
+            }
+
+            var mask = ctx.FullValidation.WriteMask;
+            if (mask != null && !mask.AnyTrue())
+            {
+                return Reject;
+            }
+
+            return new ExecutionDecision(
+                resultType,
+                ctx.SelectedTile,
+                null,
+                mask,
+                1,
+                ctx.TransformMatrix);
+        }
+
         public ExecutionDecision WithWriteMask(CellMask mask) =>
             new ExecutionDecision(Type, WriteTile, AlternateWriteTile, mask, ConstructionId, TransformMatrix);
     }

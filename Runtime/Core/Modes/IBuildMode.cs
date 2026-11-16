@@ -7,7 +7,6 @@ namespace TMBS.Core.Modes
     {
         string Id { get; }
         bool RequiresPreview { get; }
-        bool SupportsDrag { get; }
 
         PipelineContext Interpret(in BuildIntent intent, in PipelineContext ctx);
     }

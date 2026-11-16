@@ -7,7 +7,6 @@ namespace TMBS.Core.Modes
     {
         public string Id => "ImmediateBuild";
         public bool RequiresPreview => false;
-        public bool SupportsDrag => true;
 
         public PipelineContext Interpret(in BuildIntent intent, in PipelineContext ctx)
         {

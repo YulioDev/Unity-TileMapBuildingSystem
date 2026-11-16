@@ -4,7 +4,6 @@ using TMBS.Core.Events;
 using TMBS.Core.History;
 using TMBS.Core.Metadata;
 using TMBS.Core.Pipeline;
-using TMBS.Unity.Tilemaps;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 

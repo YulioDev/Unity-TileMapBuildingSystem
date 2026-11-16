@@ -1,6 +1,5 @@
 using System;
 using TMBS.Core.Metadata;
-using TMBS.Unity.Tilemaps;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
@@ -38,7 +37,7 @@ namespace TMBS.Core.History
                 return;
 
             int totalCells = TMBS.Core.Grid.TileBlockIndex.Volume(_bounds);
-            
+
             if (_changes.Length >= totalCells)
             {
                 var tiles = new TileBase[totalCells];
@@ -50,43 +49,21 @@ namespace TMBS.Core.History
                 }
 
                 _tilemap.SetTilesBlock(_bounds, tiles);
-
-                if (_metadata != null)
-                {
-                    for (int i = 0; i < _changes.Length; i++)
-                    {
-                        var change = _changes[i];
-                        var meta = useAfter ? change.AfterMeta : change.BeforeMeta;
-                        if (!meta.HasValue)
-                            _metadata.Remove(change.Cell);
-                        else
-                            _metadata.Set(meta.Value);
-                    }
-                }
+            }
+            else
+            {
+                var positions = new Vector3Int[_changes.Length];
+                var tilesSparse = new TileBase[_changes.Length];
 
                 for (int i = 0; i < _changes.Length; i++)
                 {
                     var change = _changes[i];
-                    var mat = useAfter ? change.AfterMatrix : change.BeforeMatrix;
-                    _tilemap.SetTileFlags(change.Cell, TileFlags.None);
-                    _tilemap.SetTransformMatrix(change.Cell, mat);
+                    positions[i] = change.Cell;
+                    tilesSparse[i] = useAfter ? change.AfterTile : change.BeforeTile;
                 }
 
-                _onRegionModified?.Invoke(_bounds);
-                return;
+                _tilemap.SetTiles(positions, tilesSparse);
             }
-
-            var positions = new Vector3Int[_changes.Length];
-            var tilesSparse = new TileBase[_changes.Length];
-
-            for (int i = 0; i < _changes.Length; i++)
-            {
-                var change = _changes[i];
-                positions[i] = change.Cell;
-                tilesSparse[i] = useAfter ? change.AfterTile : change.BeforeTile;
-            }
-
-            _tilemap.SetTiles(positions, tilesSparse);
 
             if (_metadata != null)
             {

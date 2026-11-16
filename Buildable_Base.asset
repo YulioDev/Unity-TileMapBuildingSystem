@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: Buildable_Base
   m_EditorClassIdentifier: Assembly-CSharp::TMBS.Runtime.Config.TmbsBuildableData
   id: tile_base
-  displayName: "Estructura Base"
-  category: "Estructura"
+  displayName: "Base Structure"
+  category: "Structure"
   tile: {fileID: 11400000, guid: 154a0bd315a96f144be4d5c9cc2fe362, type: 2}
   previewSprite: {fileID: 8764452231374864455, guid: f78a5410524e7fa439f97e2751dd722f, type: 3}
   workCost: 1

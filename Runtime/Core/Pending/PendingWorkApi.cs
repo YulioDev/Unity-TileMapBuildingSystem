@@ -120,29 +120,7 @@ namespace TMBS.Core.Pending
                     var c = allCells[i];
                     if (!c.IsCompleted)
                     {
-                        if (_targetTilemap != null)
-                        {
-                            _targetTilemap.SetTile(c.Cell, c.Tile);
-                            if (c.Tile != null)
-                            {
-                                _targetTilemap.SetTileFlags(c.Cell, TileFlags.None);
-                                _targetTilemap.SetTransformMatrix(c.Cell, c.TransformMatrix);
-                            }
-                            else
-                            {
-                                _targetTilemap.SetTransformMatrix(c.Cell, Matrix4x4.identity);
-                            }
-                        }
-
-                        if (_metadata != null)
-                        {
-                            if (c.Tile != null)
-                                _metadata.Set(new BuildRecord(c.Tile, c.Cell, BuildState.Completed, c.BuildableData));
-                            else
-                                _metadata.Remove(c.Cell);
-                        }
-
-                        _events?.Publish(new RegionModifiedEvent(_instanceId, new BoundsInt(c.Cell, Vector3Int.one)));
+                        ApplyCompletedCell(in c);
                         pending.UpdateCell(i, c.WithCompleted());
                     }
                 }
@@ -153,29 +131,7 @@ namespace TMBS.Core.Pending
                 return true;
             }
 
-            if (_targetTilemap != null)
-            {
-                _targetTilemap.SetTile(cell, cellData.Tile);
-                if (cellData.Tile != null)
-                {
-                    _targetTilemap.SetTileFlags(cell, TileFlags.None);
-                    _targetTilemap.SetTransformMatrix(cell, cellData.TransformMatrix);
-                }
-                else
-                {
-                    _targetTilemap.SetTransformMatrix(cell, Matrix4x4.identity);
-                }
-            }
-
-            if (_metadata != null)
-            {
-                if (cellData.Tile != null)
-                    _metadata.Set(new BuildRecord(cellData.Tile, cell, BuildState.Completed, cellData.BuildableData));
-                else
-                    _metadata.Remove(cell);
-            }
-
-            _events?.Publish(new RegionModifiedEvent(_instanceId, new BoundsInt(cell, Vector3Int.one)));
+            ApplyCompletedCell(in cellData);
             pending.UpdateCell(idx, cellData.WithCompleted());
 
             bool allDone = true;
@@ -227,6 +183,33 @@ namespace TMBS.Core.Pending
         }
 
         public IReadOnlyList<PendingOrder> GetAll() => _store.All;
+
+        private void ApplyCompletedCell(in PendingCell cell)
+        {
+            if (_targetTilemap != null)
+            {
+                _targetTilemap.SetTile(cell.Cell, cell.Tile);
+                if (cell.Tile != null)
+                {
+                    _targetTilemap.SetTileFlags(cell.Cell, TileFlags.None);
+                    _targetTilemap.SetTransformMatrix(cell.Cell, cell.TransformMatrix);
+                }
+                else
+                {
+                    _targetTilemap.SetTransformMatrix(cell.Cell, Matrix4x4.identity);
+                }
+            }
+
+            if (_metadata != null)
+            {
+                if (cell.Tile != null)
+                    _metadata.Set(new BuildRecord(cell.Tile, cell.Cell, BuildState.Completed, cell.BuildableData));
+                else
+                    _metadata.Remove(cell.Cell);
+            }
+
+            _events?.Publish(new RegionModifiedEvent(_instanceId, new BoundsInt(cell.Cell, Vector3Int.one)));
+        }
 
         private static bool AllCellsReadyForWork(PendingOrder pending)
         {

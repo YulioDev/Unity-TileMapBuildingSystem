@@ -81,6 +81,7 @@ namespace TMBS.UI
         private string _activeCategory = "All";
         private Coroutine _toastCoroutine;
         private bool _hasUserClearedSelection = false;
+        private Font _defaultFont;
 
         // Subscriptions
         private IDisposable _selectionChangedSub;
@@ -287,22 +288,24 @@ namespace TMBS.UI
             }
             _instantiatedCategoryButtons.Clear();
 
-            Font defaultFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (defaultFont == null) defaultFont = Font.CreateDynamicFontFromOSFont("Arial", 11);
+            if (_defaultFont == null)
+            {
+                _defaultFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                if (_defaultFont == null)
+                {
+                    _defaultFont = Font.CreateDynamicFontFromOSFont("Arial", 11);
+                }
+            }
 
             foreach (var cat in _categories)
             {
                 string categoryName = cat;
-                bool isActive = categoryName == _activeCategory;
 
                 var tabObj = new GameObject($"Tab_{categoryName}", typeof(RectTransform), typeof(Image), typeof(Button));
                 tabObj.transform.SetParent(categoryTabsContainer, false);
 
                 var rt = tabObj.GetComponent<RectTransform>();
                 rt.sizeDelta = new Vector2(85f, 24f);
-
-                var img = tabObj.GetComponent<Image>();
-                img.color = isActive ? new Color(0.18f, 0.55f, 0.85f, 1f) : new Color(0.14f, 0.18f, 0.24f, 0.85f);
 
                 var btn = tabObj.GetComponent<Button>();
                 var colors = btn.colors;
@@ -322,20 +325,49 @@ namespace TMBS.UI
                 var txt = labelObj.GetComponent<Text>();
                 txt.text = categoryName;
                 txt.fontSize = 11;
-                txt.fontStyle = isActive ? FontStyle.Bold : FontStyle.Normal;
                 txt.alignment = TextAnchor.MiddleCenter;
-                txt.color = isActive ? Color.white : new Color(0.75f, 0.85f, 0.95f, 0.9f);
-                txt.font = defaultFont;
+                txt.font = _defaultFont;
                 txt.raycastTarget = false;
 
                 _instantiatedCategoryButtons.Add(btn);
+            }
+
+            RefreshCategoryTabVisuals();
+        }
+
+        private void RefreshCategoryTabVisuals()
+        {
+            for (int i = 0; i < _instantiatedCategoryButtons.Count; i++)
+            {
+                var btn = _instantiatedCategoryButtons[i];
+                if (btn == null) continue;
+
+                var label = btn.GetComponentInChildren<Text>();
+                string categoryName = label != null
+                    ? label.text
+                    : (i < _categories.Count ? _categories[i] : null);
+                bool isActive = categoryName == _activeCategory;
+
+                var img = btn.GetComponent<Image>();
+                if (img != null)
+                {
+                    img.color = isActive
+                        ? new Color(0.18f, 0.55f, 0.85f, 1f)
+                        : new Color(0.14f, 0.18f, 0.24f, 0.85f);
+                }
+
+                if (label != null)
+                {
+                    label.fontStyle = isActive ? FontStyle.Bold : FontStyle.Normal;
+                    label.color = isActive ? Color.white : new Color(0.75f, 0.85f, 0.95f, 0.9f);
+                }
             }
         }
 
         public void SetCategoryFilter(string category)
         {
             _activeCategory = category;
-            BuildCategoryTabs();
+            RefreshCategoryTabVisuals();
             BuildPalette();
         }
 

@@ -32,6 +32,5 @@ namespace TMBS.Core.Selection
         }
 
         public override TmbsBuildableData ResolveData() => data;
-        public override bool IsSingleTile => true;
     }
 }

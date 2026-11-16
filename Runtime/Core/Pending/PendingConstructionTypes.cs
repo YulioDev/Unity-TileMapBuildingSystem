@@ -46,19 +46,7 @@ namespace TMBS.Core.Pending
             int workDone,
             int resourceRequired,
             int resourceDelivered)
-            : this(cell, tile, null, workRequired, workDone, resourceRequired, resourceDelivered, false, Matrix4x4.identity)
-        {
-        }
-
-        public PendingCell(
-            Vector3Int cell,
-            TileBase tile,
-            TmbsBuildableData buildableData,
-            int workRequired,
-            int workDone,
-            int resourceRequired,
-            int resourceDelivered)
-            : this(cell, tile, buildableData, workRequired, workDone, resourceRequired, resourceDelivered, false, Matrix4x4.identity)
+            : this(cell, tile, null, workRequired, workDone, resourceRequired, resourceDelivered)
         {
         }
 
@@ -70,21 +58,8 @@ namespace TMBS.Core.Pending
             int workDone,
             int resourceRequired,
             int resourceDelivered,
-            bool isCompleted)
-            : this(cell, tile, buildableData, workRequired, workDone, resourceRequired, resourceDelivered, isCompleted, Matrix4x4.identity)
-        {
-        }
-
-        public PendingCell(
-            Vector3Int cell,
-            TileBase tile,
-            TmbsBuildableData buildableData,
-            int workRequired,
-            int workDone,
-            int resourceRequired,
-            int resourceDelivered,
-            bool isCompleted,
-            Matrix4x4 transformMatrix)
+            bool isCompleted = false,
+            Matrix4x4 transformMatrix = default)
         {
             Cell = cell;
             Tile = tile;

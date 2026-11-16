@@ -21,7 +21,7 @@ namespace TMBS.Runtime.Debugging
         [Header("Runtime State")]
         [SerializeField] private bool isOpen = false;
 
-        private const int WindowId = 884422;
+        private const int WindowId = 1001;
         private Rect _windowRect = new Rect(24, 24, 520, 680);
         private Vector2 _scrollPos;
         private bool _isStylesInitialized;
@@ -52,6 +52,8 @@ namespace TMBS.Runtime.Debugging
         private GUIStyle _orderBoxStyle;
         private GUIStyle _progressBarBgStyle;
         private GUIStyle _progressBarFillStyle;
+        private GUIStyle _modeStatusStyle;
+        private GUIStyle _orderHeaderStyle;
 
         public static bool IsPointerOverAnyMenu { get; private set; }
 
@@ -432,6 +434,19 @@ namespace TMBS.Runtime.Debugging
                 margin = new RectOffset(0, 0, 0, 0)
             };
 
+            _modeStatusStyle = new GUIStyle(GUI.skin.label)
+            {
+                richText = true,
+                fontStyle = FontStyle.Bold
+            };
+
+            _orderHeaderStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontStyle = FontStyle.Bold,
+                fontSize = 12,
+                normal = { textColor = Color.white }
+            };
+
             _isStylesInitialized = true;
         }
 
@@ -495,8 +510,7 @@ namespace TMBS.Runtime.Debugging
                 ? "<color=#55ff88>IMMEDIATE (Direct)</color>"
                 : "<color=#55ccff>PENDING (Deferred)</color>";
 
-            var richLabel = new GUIStyle(GUI.skin.label) { richText = true, fontStyle = FontStyle.Bold };
-            GUILayout.Label(modeText, richLabel);
+            GUILayout.Label(modeText, _modeStatusStyle);
 
             GUILayout.FlexibleSpace();
 
@@ -737,7 +751,7 @@ namespace TMBS.Runtime.Debugging
             GUILayout.BeginHorizontal();
 
             // Order header & State badge
-            GUILayout.Label($"Order #{order.Id}", EditorHeaderStyle(), GUILayout.Width(75));
+            GUILayout.Label($"Order #{order.Id}", _orderHeaderStyle, GUILayout.Width(75));
 
             string stateName = order.State.ToString();
             GUIStyle badgeStyle = GetBadgeStyle(order.State);
@@ -803,14 +817,7 @@ namespace TMBS.Runtime.Debugging
 
             if (cell.IsCompleted)
             {
-                var greenBox = new GUIStyle(GUI.skin.box)
-                {
-                    fontSize = 10,
-                    fontStyle = FontStyle.Bold,
-                    alignment = TextAnchor.MiddleCenter,
-                    normal = { textColor = new Color(0.2f, 1f, 0.4f) }
-                };
-                GUILayout.Box("Completed", greenBox, GUILayout.Width(80), GUILayout.Height(18));
+                GUILayout.Box("Completed", _badgeReadyStyle, GUILayout.Width(80), GUILayout.Height(18));
             }
             else
             {
@@ -853,16 +860,6 @@ namespace TMBS.Runtime.Debugging
             }
 
             GUILayout.EndHorizontal();
-        }
-
-        private GUIStyle EditorHeaderStyle()
-        {
-            return new GUIStyle(GUI.skin.label)
-            {
-                fontStyle = FontStyle.Bold,
-                fontSize = 12,
-                normal = { textColor = Color.white }
-            };
         }
 
         private GUIStyle GetBadgeStyle(PendingState state)

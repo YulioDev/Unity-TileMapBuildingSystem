@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: Buildable_Red
   m_EditorClassIdentifier: Assembly-CSharp::TMBS.Runtime.Config.TmbsBuildableData
   id: tile_red
-  displayName: "Bloque Rojo"
-  category: "Bloques"
+  displayName: "Red Block"
+  category: "Blocks"
   tile: {fileID: 11400000, guid: 50202cb830faae04ba588237a9a8923b, type: 2}
   previewSprite: {fileID: 8237715836171530394, guid: 459c4b590715b6243aca4c6c9d201731, type: 3}
   workCost: 2

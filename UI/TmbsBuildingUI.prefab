@@ -284,7 +284,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: SISTEMA DE CONSTRUCCIÓN TMBS
+  m_Text: TMBS BUILDING SYSTEM
 --- !u!1 &1120
 GameObject:
   m_ObjectHideFlags: 0
@@ -420,7 +420,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: "Construyendo: Bloque Azul"
+  m_Text: "Building: Blue Block"
 --- !u!1 &1140
 GameObject:
   m_ObjectHideFlags: 0
@@ -490,7 +490,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: "Categoría: Bloques  |  Trabajo: 1  |  Costo: 0"
+  m_Text: "Category: Blocks  |  Work: 1  |  Cost: 0"
 --- !u!1 &1150
 GameObject:
   m_ObjectHideFlags: 0
@@ -672,7 +672,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: "\u21BA Deshacer [Z]"
+  m_Text: "Undo [Ctrl+Z]"
 --- !u!1 &1160
 GameObject:
   m_ObjectHideFlags: 0
@@ -854,7 +854,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: "\u21BB Rehacer [Y]"
+  m_Text: "Redo [Ctrl+Y]"
 --- !u!1 &1170
 GameObject:
   m_ObjectHideFlags: 0
@@ -1036,7 +1036,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: "\u2716 Deseleccionar [Esc]"
+  m_Text: "Clear [Esc]"
 --- !u!1 &1180
 GameObject:
   m_ObjectHideFlags: 0
@@ -1173,7 +1173,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: "\u26CF \u00D3rdenes pendientes: 0"
+  m_Text: "Pending orders: 0"
 --- !u!1 &1200
 GameObject:
   m_ObjectHideFlags: 0
@@ -1312,7 +1312,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: "CAT\u00C1LOGO DE CONSTRUCCI\u00D3N  (Acceso r\u00E1pido: Teclas 1 a 9)"
+  m_Text: "BUILD CATALOG  (Hotkeys: 1-9)"
 --- !u!1 &1230
 GameObject:
   m_ObjectHideFlags: 0
@@ -1573,4 +1573,4 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: "Aviso de validaci\u00F3n"
+  m_Text: "Validation notice"

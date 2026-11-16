@@ -53,7 +53,6 @@ namespace TMBS.Runtime.Interface
             IGridSpace gridSpace = new UnityGridSpace(targetTilemap);
 
             var tileSelectionState = new TileSelectionState();
-            var selectionState = tileSelectionState;
 
             IBuildMode activeMode = new ImmediateBuildMode();
             IExecutionRouter router;
@@ -114,14 +113,7 @@ namespace TMBS.Runtime.Interface
                         globalBounds = bv.allowedBounds;
                     }
 
-                    if (v is IMetadataConsumer injectable)
-                    {
-                        injectable.Inject(metadata);
-                    }
-                    if (v is IOccupancyConsumer occInjectable)
-                    {
-                        occInjectable.InjectOccupancySource(occupancySource);
-                    }
+                    InjectValidatorDependencies(v, metadata, occupancySource, pendingStore);
 
                     validators.Add(v);
                 }
@@ -133,22 +125,11 @@ namespace TMBS.Runtime.Interface
                 {
                     if (sceneValidators[i] is IValidator validator)
                     {
-                        if (validator is IMetadataConsumer injectable)
-                            injectable.Inject(metadata);
-
-                        if (validator is IOccupancyConsumer occInjectable)
-                            occInjectable.InjectOccupancySource(occupancySource);
+                        InjectValidatorDependencies(validator, metadata, occupancySource, pendingStore);
 
                         validators.Add(validator);
                     }
                 }
-            }
-
-            if (pendingStore != null)
-            {
-                for (int i = 0; i < validators.Count; i++)
-                    if (validators[i] is IPendingStoreConsumer si)
-                        si.InjectStore(pendingStore);
             }
 
             var validatorPipeline = new ValidatorPipeline(validators);
@@ -173,12 +154,28 @@ namespace TMBS.Runtime.Interface
                 history,
                 metadata,
                 preview,
-                selectionState,
+                tileSelectionState,
                 executor,
                 previewEvaluator,
                 activeMode,
                 pendingWorkApi,
                 pendingDebugBuilder);
+        }
+
+        private static void InjectValidatorDependencies(
+            IValidator validator,
+            IMetadataStore metadata,
+            ICellOccupancySource occupancySource,
+            IPendingStore pendingStore)
+        {
+            if (validator is IMetadataConsumer injectable)
+                injectable.Inject(metadata);
+
+            if (validator is IOccupancyConsumer occInjectable)
+                occInjectable.InjectOccupancySource(occupancySource);
+
+            if (pendingStore != null && validator is IPendingStoreConsumer storeConsumer)
+                storeConsumer.InjectStore(pendingStore);
         }
     }
 }

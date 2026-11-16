@@ -81,18 +81,7 @@ namespace TMBS.Core.Pending
             {
                 if (!writeMask.Bits[i]) continue;
                 var cell = writeMask.CellAt(i);
-                int resCost = ResolveResourceCost(ctx, cell);
-
-                var cellData = new PendingCell(
-                    cell,
-                    ctx.Decision.WriteTile,
-                    ctx.BuildableData,
-                    ResolveWorkCost(ctx, cell),
-                    0,
-                    resCost,
-                    0,
-                    false,
-                    ctx.Decision.TransformMatrix);
+                var cellData = CreatePendingCell(in ctx, cell, out int resCost);
 
                 var cellBounds = new BoundsInt(cell, Vector3Int.one);
                 list.Add((cellBounds, new[] { cellData }, ResolveInitialState(resCost)));
@@ -118,25 +107,29 @@ namespace TMBS.Core.Pending
             {
                 if (!writeMask.Bits[i]) continue;
                 var cell = writeMask.CellAt(i);
-                int resCost = ResolveResourceCost(ctx, cell);
+                cells[w++] = CreatePendingCell(in ctx, cell, out int resCost);
                 totalResCost += resCost;
-
-                cells[w++] = new PendingCell(
-                    cell,
-                    ctx.Decision.WriteTile,
-                    ctx.BuildableData,
-                    ResolveWorkCost(ctx, cell),
-                    0,
-                    resCost,
-                    0,
-                    false,
-                    ctx.Decision.TransformMatrix);
             }
 
             return new List<(BoundsInt bounds, PendingCell[] cells, PendingState initialState)>
             {
                 (bounds, cells, ResolveInitialState(totalResCost))
             };
+        }
+
+        private PendingCell CreatePendingCell(in PipelineContext ctx, Vector3Int cell, out int resourceCost)
+        {
+            resourceCost = ResolveResourceCost(ctx, cell);
+            return new PendingCell(
+                cell,
+                ctx.Decision.WriteTile,
+                ctx.BuildableData,
+                ResolveWorkCost(ctx, cell),
+                0,
+                resourceCost,
+                0,
+                false,
+                ctx.Decision.TransformMatrix);
         }
 
         private int ResolveWorkCost(in PipelineContext ctx, Vector3Int cell)

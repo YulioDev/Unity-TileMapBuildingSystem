@@ -10,8 +10,6 @@ namespace TMBS.Core.Selection
         /// <summary>Primary tile used for placement and preview.</summary>
         public abstract TileBase ResolvePrimaryTile();
 
-        public abstract bool IsSingleTile { get; }
-
         /// <summary>Associated buildable data asset, or null if backed by a raw tile.</summary>
         public virtual TmbsBuildableData ResolveData() => null;
     }
