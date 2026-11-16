@@ -24,6 +24,9 @@ namespace TMBS.UI
         [SerializeField] private Color selectedColor = new Color(0.2f, 0.8f, 1f, 1f);
         [SerializeField] private Color normalBorderColor = new Color(0.25f, 0.25f, 0.3f, 0.6f);
 
+        private static readonly Color SelectedBackgroundColor = new Color(0.18f, 0.26f, 0.36f, 0.95f);
+        private static readonly Color NormalBackgroundColor = new Color(0.12f, 0.15f, 0.2f, 0.85f);
+
         public TmbsBuildableData BuildableData { get; private set; }
         public TileBase DirectTile { get; private set; }
         public bool IsSelected { get; private set; }
@@ -39,6 +42,45 @@ namespace TMBS.UI
 
             if (slotButton != null)
                 slotButton.onClick.AddListener(OnClick);
+
+            ConfigureSlotLayout();
+        }
+
+        private void ConfigureSlotLayout()
+        {
+            var fitter = GetComponent<AspectRatioFitter>();
+            if (fitter == null)
+                fitter = gameObject.AddComponent<AspectRatioFitter>();
+            fitter.aspectMode = AspectRatioFitter.AspectMode.HeightControlsWidth;
+            fitter.aspectRatio = 1f;
+
+            if (iconImage != null)
+            {
+                iconImage.preserveAspect = true;
+                var iconRt = iconImage.rectTransform;
+                iconRt.anchorMin = new Vector2(0.15f, 0.28f);
+                iconRt.anchorMax = new Vector2(0.85f, 0.90f);
+                iconRt.offsetMin = Vector2.zero;
+                iconRt.offsetMax = Vector2.zero;
+            }
+
+            if (labelText != null)
+            {
+                labelText.fontSize = 13;
+                labelText.resizeTextForBestFit = true;
+                labelText.resizeTextMinSize = 9;
+                labelText.resizeTextMaxSize = 14;
+                labelText.horizontalOverflow = HorizontalWrapMode.Wrap;
+                labelText.verticalOverflow = VerticalWrapMode.Truncate;
+            }
+
+            if (costBadgeText != null)
+            {
+                costBadgeText.fontSize = 12;
+                costBadgeText.resizeTextForBestFit = true;
+                costBadgeText.resizeTextMinSize = 9;
+                costBadgeText.resizeTextMaxSize = 13;
+            }
         }
 
         /// <summary>
@@ -178,8 +220,15 @@ namespace TMBS.UI
                 highlightBorder.color = selected ? selectedColor : normalBorderColor;
             }
 
-            // Slight scale effect for selected item
-            transform.localScale = selected ? new Vector3(1.06f, 1.06f, 1f) : Vector3.one;
+            Graphic background = slotButton != null && slotButton.targetGraphic != null
+                ? slotButton.targetGraphic
+                : GetComponent<Image>();
+            if (background != null)
+            {
+                background.color = selected ? SelectedBackgroundColor : NormalBackgroundColor;
+            }
+
+            transform.localScale = Vector3.one;
         }
 
         private void SetIcon(Sprite sprite)

@@ -107,8 +107,153 @@ namespace TMBS.UI
                 Debug.LogWarning("TMBS: Palette container is not assigned. Use the TmbsBuildingUI prefab or Tools/TMBS/1. Configure Scene UI.", this);
             }
 
+            ConfigureResponsiveCanvas();
             EnsureEraseButton();
             HookButtons();
+        }
+
+        private void ConfigureResponsiveCanvas()
+        {
+            var canvas = GetComponentInParent<Canvas>();
+            if (canvas != null)
+            {
+                canvas.pixelPerfect = true;
+            }
+
+            var scaler = canvas != null ? canvas.GetComponent<CanvasScaler>() : null;
+            if (scaler != null)
+            {
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1920f, 1080f);
+                scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+                scaler.matchWidthOrHeight = 0.5f;
+                scaler.referencePixelsPerUnit = 64f;
+            }
+
+            if (activeItemPanel != null)
+            {
+                var topRt = activeItemPanel.GetComponent<RectTransform>();
+                if (topRt != null)
+                {
+                    topRt.pivot = new Vector2(0.5f, 1f);
+                    SetAnchorRect(topRt, new Vector2(0f, 0.915f), new Vector2(1f, 1f));
+                }
+
+                var titleTransform = activeItemPanel.transform.Find("TitleText") ?? activeItemPanel.transform.Find("Title");
+                if (titleTransform != null)
+                {
+                    SetAnchorRect(titleTransform.GetComponent<RectTransform>(), new Vector2(0.048f, 0.52f), new Vector2(0.38f, 0.94f));
+                    ConfigureTextElement(titleTransform.GetComponent<Text>(), 18, 11, 20);
+                }
+            }
+
+            if (activeItemIcon != null)
+            {
+                var iconRt = activeItemIcon.rectTransform;
+                iconRt.pivot = new Vector2(0.5f, 0.5f);
+                SetAnchorRect(iconRt, new Vector2(0.012f, 0.14f), new Vector2(0.042f, 0.86f));
+                activeItemIcon.preserveAspect = true;
+            }
+
+            if (activeItemNameText != null)
+            {
+                SetAnchorRect(activeItemNameText.rectTransform, new Vector2(0.048f, 0.08f), new Vector2(0.26f, 0.50f));
+                ConfigureTextElement(activeItemNameText, 15, 10, 16);
+            }
+
+            if (activeItemDetailsText != null)
+            {
+                SetAnchorRect(activeItemDetailsText.rectTransform, new Vector2(0.265f, 0.08f), new Vector2(0.565f, 0.50f));
+                ConfigureTextElement(activeItemDetailsText, 14, 9, 15);
+            }
+
+            if (pendingPanel != null)
+            {
+                SetAnchorRect(pendingPanel.GetComponent<RectTransform>(), new Vector2(0.39f, 0.54f), new Vector2(0.565f, 0.92f));
+            }
+            ConfigureTextElement(pendingCountText, 14, 9, 15);
+
+            var bottomPanelRt = paletteContainer != null ? paletteContainer.parent as RectTransform : null;
+            if (bottomPanelRt != null)
+            {
+                bottomPanelRt.pivot = new Vector2(0.5f, 0f);
+                SetAnchorRect(bottomPanelRt, new Vector2(0.12f, 0.015f), new Vector2(0.88f, 0.175f));
+
+                var paletteTitleTransform = bottomPanelRt.Find("PaletteTitle") ?? bottomPanelRt.Find("PaletteHeader");
+                if (paletteTitleTransform != null)
+                {
+                    SetAnchorRect(paletteTitleTransform.GetComponent<RectTransform>(), new Vector2(0.02f, 0.80f), new Vector2(0.98f, 0.97f));
+                    ConfigureTextElement(paletteTitleTransform.GetComponent<Text>(), 14, 10, 15);
+                }
+            }
+
+            if (categoryTabsContainer != null)
+            {
+                SetAnchorRect(categoryTabsContainer.GetComponent<RectTransform>(), new Vector2(0.02f, 0.60f), new Vector2(0.98f, 0.79f));
+                var tabsLayout = categoryTabsContainer.GetComponent<HorizontalLayoutGroup>();
+                if (tabsLayout != null)
+                {
+                    tabsLayout.childControlWidth = true;
+                    tabsLayout.childControlHeight = true;
+                    tabsLayout.childForceExpandWidth = false;
+                    tabsLayout.childForceExpandHeight = true;
+                    tabsLayout.spacing = 8f;
+                }
+            }
+
+            if (paletteContainer != null)
+            {
+                SetAnchorRect(paletteContainer.GetComponent<RectTransform>(), new Vector2(0.02f, 0.05f), new Vector2(0.98f, 0.57f));
+                var slotsLayout = paletteContainer.GetComponent<HorizontalLayoutGroup>();
+                if (slotsLayout != null)
+                {
+                    slotsLayout.childControlWidth = false;
+                    slotsLayout.childControlHeight = true;
+                    slotsLayout.childForceExpandWidth = false;
+                    slotsLayout.childForceExpandHeight = true;
+                    slotsLayout.spacing = 12f;
+                }
+            }
+
+            if (toastPanel != null)
+            {
+                var toastRt = toastPanel.GetComponent<RectTransform>();
+                if (toastRt != null)
+                {
+                    toastRt.pivot = new Vector2(0.5f, 0.5f);
+                    SetAnchorRect(toastRt, new Vector2(0.28f, 0.19f), new Vector2(0.72f, 0.245f));
+                }
+            }
+            ConfigureTextElement(toastText, 16, 10, 18);
+
+            ConfigureButtonLabel(eraseButton);
+            ConfigureButtonLabel(undoButton);
+            ConfigureButtonLabel(redoButton);
+            ConfigureButtonLabel(clearButton);
+        }
+
+        private static void ConfigureButtonLabel(Button button)
+        {
+            if (button == null) return;
+            ConfigureTextElement(button.GetComponentInChildren<Text>(true), 14, 9, 15);
+        }
+
+        private static void SetAnchorRect(RectTransform rt, Vector2 anchorMin, Vector2 anchorMax)
+        {
+            if (rt == null) return;
+            rt.anchorMin = anchorMin;
+            rt.anchorMax = anchorMax;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+        }
+
+        private static void ConfigureTextElement(Text text, int fontSize, int minSize, int maxSize)
+        {
+            if (text == null) return;
+            text.fontSize = fontSize;
+            text.resizeTextForBestFit = true;
+            text.resizeTextMinSize = minSize;
+            text.resizeTextMaxSize = maxSize;
         }
 
         private void OnEnable()
@@ -308,11 +453,16 @@ namespace TMBS.UI
             {
                 string categoryName = cat;
 
-                var tabObj = new GameObject($"Tab_{categoryName}", typeof(RectTransform), typeof(Image), typeof(Button));
+                var tabObj = new GameObject($"Tab_{categoryName}", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
                 tabObj.transform.SetParent(categoryTabsContainer, false);
 
                 var rt = tabObj.GetComponent<RectTransform>();
                 rt.sizeDelta = new Vector2(85f, 24f);
+
+                var layoutElement = tabObj.GetComponent<LayoutElement>();
+                layoutElement.minWidth = 84f;
+                layoutElement.preferredWidth = Mathf.Max(88f, categoryName.Length * 10f + 24f);
+                layoutElement.preferredHeight = 28f;
 
                 var btn = tabObj.GetComponent<Button>();
                 var colors = btn.colors;
@@ -325,16 +475,14 @@ namespace TMBS.UI
                 var labelObj = new GameObject("Label", typeof(RectTransform), typeof(Text));
                 labelObj.transform.SetParent(tabObj.transform, false);
                 var labelRt = labelObj.GetComponent<RectTransform>();
-                labelRt.anchorMin = Vector2.zero;
-                labelRt.anchorMax = Vector2.one;
-                labelRt.sizeDelta = Vector2.zero;
+                SetAnchorRect(labelRt, Vector2.zero, Vector2.one);
 
                 var txt = labelObj.GetComponent<Text>();
                 txt.text = categoryName;
-                txt.fontSize = 11;
                 txt.alignment = TextAnchor.MiddleCenter;
                 txt.font = _defaultFont;
                 txt.raycastTarget = false;
+                ConfigureTextElement(txt, 13, 9, 14);
 
                 _instantiatedCategoryButtons.Add(btn);
             }
@@ -633,27 +781,6 @@ namespace TMBS.UI
         {
             if (eraseButton != null || activeItemPanel == null) return;
 
-            if (pendingPanel != null)
-            {
-                var pendingRt = pendingPanel.GetComponent<RectTransform>();
-                if (pendingRt != null)
-                {
-                    pendingRt.anchorMin = new Vector2(0.40f, 0.52f);
-                    pendingRt.anchorMax = new Vector2(0.57f, 0.95f);
-                }
-            }
-
-            if (activeItemDetailsText != null)
-            {
-                var detailsRt = activeItemDetailsText.GetComponent<RectTransform>();
-                if (detailsRt != null)
-                {
-                    var max = detailsRt.anchorMax;
-                    max.x = 0.57f;
-                    detailsRt.anchorMax = max;
-                }
-            }
-
             Font font = null;
             if (undoButton != null)
             {
@@ -696,12 +823,12 @@ namespace TMBS.UI
 
             var label = labelObj.GetComponent<Text>();
             label.text = "Erase [X]";
-            label.fontSize = 12;
             label.fontStyle = FontStyle.Bold;
             label.alignment = TextAnchor.MiddleCenter;
             label.color = Color.white;
             label.font = font;
             label.raycastTarget = false;
+            ConfigureTextElement(label, 14, 9, 15);
 
             RefreshEraseButtonVisual();
         }
