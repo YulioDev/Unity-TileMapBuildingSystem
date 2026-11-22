@@ -179,7 +179,7 @@ namespace TMBS.Editor
 
             EditorGUILayout.LabelField("Input", EditorStyles.boldLabel);
 
-            if (GUILayout.Button("Open Input Configurator Window", GUILayout.Height(24)))
+            if (GUILayout.Button("Open TMBS Settings", GUILayout.Height(24)))
             {
                 TMBS.Editor.InputConfigurator.TmbsInputConfiguratorWindow.Open((TmbsRootConfig)target);
             }
@@ -234,7 +234,7 @@ namespace TMBS.Editor
         {
             EditorGUI.indentLevel++;
             EditorGUILayout.HelpBox(
-                "Legacy: Bindings are edited visually in Window ▸ TMBS ▸ Input Configurator.",
+                "Legacy: Bindings are edited visually in Window ▸ TMBS ▸ TMBS Settings.",
                 MessageType.Info);
 
             var rootConfig = target as TmbsRootConfig;

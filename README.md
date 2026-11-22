@@ -24,7 +24,7 @@ Modular Unity tilemap building framework organized around a decoupled core pipel
 - `Runtime/Interface/` - `BuildeableTilemap` facade and `TmbsSession` container.
 - `Runtime/Debug/` - Optional IMGUI overlay (`TmbsDebugMenu`) for toggling execution modes and stepping pending orders.
 - `UI/` - `TmbsBuildingUI`, `TmbsPaletteSlot`, and UI prefabs subscribed to `IEventBus` events.
-- `Editor/` - Scene UI builder (`Tools/TMBS/*`), custom inspectors (`TmbsRootConfigEditor`, `TmbsBuildableDataEditor`), and `TmbsBuildableGalleryWindow` (`Window/TMBS/Buildable Gallery`).
+- `Editor/` - Scene UI builder (`Tools/TMBS/*`), custom inspectors (`TmbsRootConfigEditor`, `TmbsBuildableDataEditor`), and `TmbsInputConfiguratorWindow` (`Window/TMBS/TMBS Settings` and `Window/TMBS/Buildables`).
 
 ## Execution Flow
 

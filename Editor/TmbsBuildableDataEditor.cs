@@ -1,6 +1,7 @@
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Tilemaps;
+using TMBS.Editor.InputConfigurator;
 using TMBS.Runtime.Config;
 using TMBS.UI;
 
@@ -22,16 +23,25 @@ namespace TMBS.Editor
 
             EditorGUILayout.Space();
 
+            if (GUILayout.Button("Open in TMBS Settings (Buildables)"))
+            {
+                TmbsInputConfiguratorWindow.OpenBuildable(data);
+            }
+
+            EditorGUILayout.Space(4f);
+
             var isBlueprintProp = serializedObject.FindProperty("isBlueprint");
             var tileProp = serializedObject.FindProperty("tile");
 
             bool isBlueprint = isBlueprintProp != null && isBlueprintProp.boolValue;
             bool hasTile = tileProp != null && tileProp.objectReferenceValue != null;
 
-            if (isBlueprint && !hasTile)
+            if (!hasTile)
             {
                 EditorGUILayout.HelpBox(
-                    "Blueprints require a Tile to be assigned.",
+                    isBlueprint
+                        ? "Blueprints require a Tile to be assigned."
+                        : "No Tile assigned. Assign a TileBase (or open Window > TMBS > TMBS Settings (Buildables) and click 'Create Tile from Sprite') before placing on a Tilemap.",
                     MessageType.Warning);
             }
 

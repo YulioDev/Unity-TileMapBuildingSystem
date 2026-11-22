@@ -1,14 +1,14 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using UnityEngine;
-using UnityEngine.UI;
-using UnityEngine.EventSystems;
-using UnityEngine.Tilemaps;
 using TMBS.Core.Events;
 using TMBS.Core.Validation;
 using TMBS.Runtime.Config;
 using TMBS.Runtime.Interface;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.Tilemaps;
+using UnityEngine.UI;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
@@ -63,6 +63,19 @@ namespace TMBS.UI
         [Header("Shortcuts")]
         [SerializeField] private bool enableKeyboardShortcuts = true;
 
+        [Header("Visual Theme & Formatting")]
+        [SerializeField] private TmbsUIThemeSettings theme = new TmbsUIThemeSettings();
+
+        [Header("Responsive Dock & Scroll (Auto-Resolved if Unassigned)")]
+        [SerializeField] private RectTransform bottomDockPanel;
+        [SerializeField] private ScrollRect paletteScrollRect;
+        [SerializeField] private ScrollRect categoryTabsScrollRect;
+        [SerializeField] private Button toggleExpandCatalogButton;
+        [SerializeField] private Text titleText;
+        [SerializeField] private Text paletteHeaderText;
+        [SerializeField] private float compactDockHeight = 168f;
+        [SerializeField] private float expandedDockHeight = 340f;
+
 #if ENABLE_INPUT_SYSTEM
         private static readonly Key[] DigitKeys =
         {
@@ -77,26 +90,15 @@ namespace TMBS.UI
         };
 #endif
 
-        private static readonly Color SurfacePanelColor = new Color(0.10f, 0.11f, 0.14f, 0.92f);
-        private static readonly Color SurfaceOutlineColor = new Color(1f, 1f, 1f, 0.12f);
-        private static readonly Color NeutralButtonColor = new Color(0.17f, 0.19f, 0.23f, 0.96f);
-        private static readonly Color DestructiveIdleColor = new Color(0.28f, 0.16f, 0.17f, 0.96f);
-        private static readonly Color EraseNormalColor = new Color(0.26f, 0.18f, 0.16f, 0.96f);
-        private static readonly Color EraseActiveColor = new Color(0.78f, 0.22f, 0.22f, 1f);
-        private static readonly Color ActiveTabColor = new Color(0.24f, 0.27f, 0.33f, 1f);
-        private static readonly Color InactiveTabColor = new Color(0.13f, 0.15f, 0.18f, 0.88f);
-        private static readonly Color AccentAmberColor = new Color(0.96f, 0.65f, 0.14f, 1f);
-        private static readonly Color InfoToastColor = new Color(0.14f, 0.16f, 0.20f, 0.96f);
-        private static readonly Color WarningToastColor = new Color(0.55f, 0.16f, 0.18f, 0.96f);
-
         private readonly List<TmbsPaletteSlot> _instantiatedSlots = new List<TmbsPaletteSlot>();
         private readonly List<string> _categories = new List<string> { "All" };
+        private readonly List<string> _tabCategories = new List<string>();
         private readonly List<Button> _instantiatedCategoryButtons = new List<Button>();
         private string _activeCategory = "All";
         private Coroutine _toastCoroutine;
-        private bool _hasUserClearedSelection = false;
+        private bool _hasUserClearedSelection;
+        private bool _hasInitializedPalette;
         private Font _defaultFont;
-        private Text _titleText;
         private float _lastValidationToastTime = -1f;
 
         // Subscriptions
@@ -108,237 +110,132 @@ namespace TMBS.UI
 
         public BuildeableTilemap BuildeableTilemap => buildeableTilemap;
         public IReadOnlyList<TmbsBuildableData> Buildables => buildables;
+        public TmbsUIThemeSettings Theme => theme ?? (theme = new TmbsUIThemeSettings());
+        public bool IsCatalogExpanded { get; private set; }
+
+        /// <summary>Toggles between compact horizontal row and expanded multi-row grid catalog modes.</summary>
+        public void ToggleCatalogExpanded() => SetCatalogExpanded(!IsCatalogExpanded);
+
+        /// <summary>Switches the catalog dock between compact 1-row horizontal scroll and expanded multi-row grid.</summary>
+        public void SetCatalogExpanded(bool expanded)
+        {
+            IsCatalogExpanded = expanded;
+
+            if (bottomDockPanel != null)
+            {
+                if (Mathf.Approximately(bottomDockPanel.anchorMin.y, bottomDockPanel.anchorMax.y))
+                {
+                    bottomDockPanel.sizeDelta = new Vector2(
+                        bottomDockPanel.sizeDelta.x,
+                        expanded ? expandedDockHeight : compactDockHeight);
+                }
+                else
+                {
+                    bottomDockPanel.anchorMax = new Vector2(
+                        bottomDockPanel.anchorMax.x,
+                        bottomDockPanel.anchorMin.y + (expanded ? 0.32f : 0.16f));
+                    bottomDockPanel.offsetMin = Vector2.zero;
+                    bottomDockPanel.offsetMax = Vector2.zero;
+                }
+            }
+
+            if (paletteContainer != null)
+            {
+                var containerRt = paletteContainer as RectTransform ?? paletteContainer.GetComponent<RectTransform>();
+
+                if (!expanded)
+                {
+                    RemoveIncompatibleLayoutGroups<HorizontalLayoutGroup>(paletteContainer.gameObject);
+
+                    var hLayout = paletteContainer.GetComponent<HorizontalLayoutGroup>()
+                        ?? paletteContainer.gameObject.AddComponent<HorizontalLayoutGroup>();
+                    hLayout.padding = new RectOffset(6, 6, 4, 4);
+                    hLayout.spacing = 10f;
+                    hLayout.childAlignment = TextAnchor.MiddleLeft;
+                    hLayout.childControlWidth = true;
+                    hLayout.childControlHeight = true;
+                    hLayout.childForceExpandWidth = false;
+                    hLayout.childForceExpandHeight = true;
+
+                    var fitter = paletteContainer.GetComponent<ContentSizeFitter>()
+                        ?? paletteContainer.gameObject.AddComponent<ContentSizeFitter>();
+                    fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+                    fitter.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+
+                    if (containerRt != null)
+                    {
+                        containerRt.anchorMin = new Vector2(0f, 0f);
+                        containerRt.anchorMax = new Vector2(0f, 1f);
+                        containerRt.pivot = new Vector2(0f, 0.5f);
+                        containerRt.anchoredPosition = Vector2.zero;
+                        containerRt.sizeDelta = new Vector2(containerRt.sizeDelta.x, 0f);
+                    }
+
+                    if (paletteScrollRect != null)
+                    {
+                        paletteScrollRect.horizontal = true;
+                        paletteScrollRect.vertical = false;
+                        paletteScrollRect.horizontalNormalizedPosition = 0f;
+                    }
+                }
+                else
+                {
+                    RemoveIncompatibleLayoutGroups<GridLayoutGroup>(paletteContainer.gameObject);
+
+                    var grid = paletteContainer.GetComponent<GridLayoutGroup>()
+                        ?? paletteContainer.gameObject.AddComponent<GridLayoutGroup>();
+                    grid.padding = new RectOffset(8, 8, 6, 6);
+                    grid.cellSize = new Vector2(84f, 88f);
+                    grid.spacing = new Vector2(10f, 10f);
+                    grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
+                    grid.startAxis = GridLayoutGroup.Axis.Horizontal;
+                    grid.childAlignment = TextAnchor.UpperLeft;
+                    grid.constraint = GridLayoutGroup.Constraint.Flexible;
+
+                    var fitter = paletteContainer.GetComponent<ContentSizeFitter>()
+                        ?? paletteContainer.gameObject.AddComponent<ContentSizeFitter>();
+                    fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+                    fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+                    if (containerRt != null)
+                    {
+                        containerRt.anchorMin = new Vector2(0f, 1f);
+                        containerRt.anchorMax = new Vector2(1f, 1f);
+                        containerRt.pivot = new Vector2(0.5f, 1f);
+                        containerRt.anchoredPosition = Vector2.zero;
+                        containerRt.sizeDelta = new Vector2(0f, containerRt.sizeDelta.y);
+                    }
+
+                    if (paletteScrollRect != null)
+                    {
+                        paletteScrollRect.horizontal = false;
+                        paletteScrollRect.vertical = true;
+                        paletteScrollRect.verticalNormalizedPosition = 1f;
+                    }
+                }
+            }
+
+            if (toggleExpandCatalogButton != null)
+            {
+                var btnLabel = toggleExpandCatalogButton.GetComponentInChildren<Text>(true);
+                if (btnLabel != null)
+                {
+                    btnLabel.text = expanded ? "Collapse \u229F" : "Expand \u229E";
+                }
+            }
+        }
 
         private void Awake()
         {
             EnsureEventSystemExists();
             ResolveBuildeableTilemap();
-
-            if (paletteContainer == null)
-            {
-                Debug.LogWarning("TMBS: Palette container is not assigned. Use the TmbsBuildingUI prefab or Tools/TMBS/1. Configure Scene UI.", this);
-            }
-
-            ConfigureResponsiveCanvas();
-            EnsureToolbarButtons();
+            EnsureRuntimeBindingsAndFallbacks();
             HookButtons();
-        }
 
-        private void ConfigureResponsiveCanvas()
-        {
-            var canvas = GetComponentInParent<Canvas>();
-            if (canvas != null)
+            if (paletteContainer != null)
             {
-                canvas.pixelPerfect = true;
+                SetCatalogExpanded(false);
             }
-
-            var scaler = canvas != null ? canvas.GetComponent<CanvasScaler>() : null;
-            if (scaler != null)
-            {
-                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-                scaler.referenceResolution = new Vector2(1920f, 1080f);
-                scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-                scaler.matchWidthOrHeight = 0.5f;
-                scaler.referencePixelsPerUnit = 64f;
-            }
-
-            if (activeItemPanel != null)
-            {
-                var topRt = activeItemPanel.GetComponent<RectTransform>();
-                if (topRt != null)
-                {
-                    topRt.pivot = new Vector2(0.5f, 1f);
-                    SetAnchorRect(topRt, new Vector2(0.015f, 0.905f), new Vector2(0.985f, 0.985f));
-                }
-                ApplySurfaceStyle(activeItemPanel, SurfacePanelColor, SurfaceOutlineColor);
-
-                var titleTransform = activeItemPanel.transform.Find("TitleText") ?? activeItemPanel.transform.Find("Title");
-                if (titleTransform != null)
-                {
-                    SetAnchorRect(titleTransform.GetComponent<RectTransform>(), new Vector2(0.06f, 0.54f), new Vector2(0.32f, 0.92f));
-                    _titleText = titleTransform.GetComponent<Text>();
-                    if (_titleText != null)
-                    {
-                        _titleText.color = AccentAmberColor;
-                        ConfigureTextElement(_titleText, 16, 10, 18);
-                    }
-                }
-            }
-
-            if (activeItemIcon != null)
-            {
-                var iconRt = activeItemIcon.rectTransform;
-                iconRt.pivot = new Vector2(0.5f, 0.5f);
-                SetAnchorRect(iconRt, new Vector2(0.01f, 0.12f), new Vector2(0.052f, 0.88f));
-                activeItemIcon.preserveAspect = true;
-            }
-
-            if (activeItemNameText != null)
-            {
-                SetAnchorRect(activeItemNameText.rectTransform, new Vector2(0.06f, 0.08f), new Vector2(0.24f, 0.52f));
-                activeItemNameText.color = new Color(0.95f, 0.96f, 0.98f, 1f);
-                ConfigureTextElement(activeItemNameText, 15, 10, 16);
-            }
-
-            if (activeItemDetailsText != null)
-            {
-                SetAnchorRect(activeItemDetailsText.rectTransform, new Vector2(0.245f, 0.08f), new Vector2(0.485f, 0.52f));
-                activeItemDetailsText.fontStyle = FontStyle.Normal;
-                activeItemDetailsText.color = new Color(0.75f, 0.78f, 0.83f, 1f);
-                ConfigureTextElement(activeItemDetailsText, 13, 9, 14);
-            }
-
-            if (pendingPanel != null)
-            {
-                SetAnchorRect(pendingPanel.GetComponent<RectTransform>(), new Vector2(0.33f, 0.54f), new Vector2(0.485f, 0.92f));
-                ApplySurfaceStyle(pendingPanel, new Color(0.20f, 0.16f, 0.07f, 0.96f), AccentAmberColor);
-            }
-            ConfigureTextElement(pendingCountText, 14, 9, 15);
-
-            var bottomPanelRt = paletteContainer != null ? paletteContainer.parent as RectTransform : null;
-            if (bottomPanelRt != null)
-            {
-                bottomPanelRt.pivot = new Vector2(0.5f, 0f);
-                SetAnchorRect(bottomPanelRt, new Vector2(0.12f, 0.015f), new Vector2(0.88f, 0.175f));
-                ApplySurfaceStyle(bottomPanelRt.gameObject, SurfacePanelColor, SurfaceOutlineColor);
-
-                var paletteTitleTransform = bottomPanelRt.Find("PaletteTitle") ?? bottomPanelRt.Find("PaletteHeader");
-                if (paletteTitleTransform != null)
-                {
-                    SetAnchorRect(paletteTitleTransform.GetComponent<RectTransform>(), new Vector2(0.02f, 0.80f), new Vector2(0.98f, 0.97f));
-                    var paletteTitleText = paletteTitleTransform.GetComponent<Text>();
-                    if (paletteTitleText != null)
-                    {
-                        paletteTitleText.color = new Color(0.88f, 0.90f, 0.94f, 1f);
-                        ConfigureTextElement(paletteTitleText, 14, 10, 15);
-                    }
-                }
-            }
-
-            ConfigureMaskedContainer(categoryTabsContainer, new Vector2(0.02f, 0.60f), new Vector2(0.98f, 0.79f), 8f, true);
-            ConfigureMaskedContainer(paletteContainer, new Vector2(0.02f, 0.05f), new Vector2(0.98f, 0.57f), 12f, false);
-
-            if (toastPanel != null)
-            {
-                var toastRt = toastPanel.GetComponent<RectTransform>();
-                if (toastRt != null)
-                {
-                    toastRt.pivot = new Vector2(0.5f, 0.5f);
-                    SetAnchorRect(toastRt, new Vector2(0.28f, 0.19f), new Vector2(0.72f, 0.245f));
-                }
-                ApplySurfaceStyle(toastPanel, InfoToastColor, SurfaceOutlineColor);
-            }
-            ConfigureTextElement(toastText, 16, 10, 18);
-        }
-
-        private static void ConfigureMaskedContainer(Transform container, Vector2 anchorMin, Vector2 anchorMax, float spacing, bool controlChildWidth)
-        {
-            if (container == null) return;
-
-            SetAnchorRect(container.GetComponent<RectTransform>(), anchorMin, anchorMax);
-            if (container.GetComponent<RectMask2D>() == null)
-            {
-                container.gameObject.AddComponent<RectMask2D>();
-            }
-
-            var layout = container.GetComponent<HorizontalLayoutGroup>();
-            if (layout != null)
-            {
-                layout.padding = new RectOffset(8, 8, 4, 4);
-                layout.childControlWidth = controlChildWidth;
-                layout.childControlHeight = true;
-                layout.childForceExpandWidth = false;
-                layout.childForceExpandHeight = true;
-                layout.spacing = spacing;
-            }
-        }
-
-        private static void ApplySurfaceStyle(GameObject target, Color bgColor, Color outlineColor)
-        {
-            if (target == null) return;
-
-            var img = target.GetComponent<Image>();
-            if (img != null)
-            {
-                img.color = bgColor;
-            }
-
-            EnsureOutline(target, outlineColor);
-
-            var shadow = EnsureExactShadow(target);
-            shadow.effectDistance = new Vector2(0f, -2f);
-            shadow.effectColor = new Color(0f, 0f, 0f, 0.45f);
-        }
-
-        private static void ApplyButtonVisual(Button button, Color bgColor, Color outlineColor, int fontSize, int minSize, int maxSize)
-        {
-            if (button == null) return;
-
-            var img = button.GetComponent<Image>();
-            if (img != null)
-            {
-                img.color = bgColor;
-                if (button.targetGraphic == null)
-                {
-                    button.targetGraphic = img;
-                }
-            }
-
-            var colors = button.colors;
-            colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(1.15f, 1.15f, 1.15f, 1f);
-            colors.pressedColor = new Color(0.8f, 0.8f, 0.8f, 1f);
-            colors.selectedColor = Color.white;
-            button.colors = colors;
-
-            EnsureOutline(button.gameObject, outlineColor);
-
-            var label = button.GetComponentInChildren<Text>(true);
-            if (label != null)
-            {
-                ConfigureTextElement(label, fontSize, minSize, maxSize);
-                label.color = Color.white;
-            }
-        }
-
-        private static Outline EnsureOutline(GameObject target, Color effectColor)
-        {
-            var outline = target.GetComponent<Outline>();
-            if (outline == null) outline = target.AddComponent<Outline>();
-            outline.effectDistance = new Vector2(1f, -1f);
-            outline.effectColor = effectColor;
-            return outline;
-        }
-
-        private static Shadow EnsureExactShadow(GameObject target)
-        {
-            var shadows = target.GetComponents<Shadow>();
-            for (int i = 0; i < shadows.Length; i++)
-            {
-                if (shadows[i] != null && shadows[i].GetType() == typeof(Shadow))
-                {
-                    return shadows[i];
-                }
-            }
-            return target.AddComponent<Shadow>();
-        }
-
-        private static void SetAnchorRect(RectTransform rt, Vector2 anchorMin, Vector2 anchorMax)
-        {
-            if (rt == null) return;
-            rt.anchorMin = anchorMin;
-            rt.anchorMax = anchorMax;
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
-        }
-
-        private static void ConfigureTextElement(Text text, int fontSize, int minSize, int maxSize)
-        {
-            if (text == null) return;
-            text.fontSize = fontSize;
-            text.resizeTextForBestFit = true;
-            text.resizeTextMinSize = minSize;
-            text.resizeTextMaxSize = maxSize;
         }
 
         private void OnEnable()
@@ -350,6 +247,11 @@ namespace TMBS.UI
         {
             ResolveBuildeableTilemap();
 
+            if (paletteContainer == null)
+            {
+                Debug.LogWarning("TMBS: Palette container is not assigned. Use the TmbsBuildingUI prefab or Tools/TMBS/1. Configure Scene UI.", this);
+            }
+
             if (_selectionChangedSub == null)
             {
                 SubscribeToTmbsEvents();
@@ -360,6 +262,7 @@ namespace TMBS.UI
             RefreshCurrentSelectionDisplay();
             UpdatePendingCount();
             RefreshEraseButtonVisual();
+            UpdateUndoRedoInteractability();
         }
 
         private void OnDisable()
@@ -387,9 +290,390 @@ namespace TMBS.UI
             }
         }
 
+        private void EnsureRuntimeBindingsAndFallbacks()
+        {
+            if (titleText == null && activeItemPanel != null)
+            {
+                titleText = FindChildText(
+                    activeItemPanel.transform,
+                    "TitleText",
+                    "Title",
+                    "LeftInfo_Zone/InfoText_Stack/HeaderRow/TitleText");
+            }
+
+            if (bottomDockPanel == null)
+            {
+                bottomDockPanel = ResolveBottomDockPanel();
+            }
+
+            if (paletteHeaderText == null && bottomDockPanel != null)
+            {
+                paletteHeaderText = FindChildText(
+                    bottomDockPanel,
+                    "PaletteTitle",
+                    "PaletteHeader",
+                    "DockHeader/PaletteTitle",
+                    "DockHeader/PaletteHeader");
+            }
+
+            if (toggleExpandCatalogButton == null && bottomDockPanel != null)
+            {
+                toggleExpandCatalogButton = FindChildComponent<Button>(
+                    bottomDockPanel,
+                    "BtnExpandCatalog",
+                    "DockHeader/BtnExpandCatalog",
+                    "BtnExpand");
+            }
+
+            if (paletteScrollRect == null && paletteContainer != null)
+            {
+                paletteScrollRect = EnsureHorizontalScrollRect(paletteContainer, "Slots_ScrollView", 28f);
+            }
+
+            if (categoryTabsScrollRect == null && categoryTabsContainer != null)
+            {
+                categoryTabsScrollRect = EnsureHorizontalScrollRect(categoryTabsContainer, "CategoryTabs_ScrollView", 24f);
+            }
+
+            EnsureActiveIconAspectFallback();
+            EnsureLegacyToolbarButtons();
+        }
+
+        private RectTransform ResolveBottomDockPanel()
+        {
+            var canvas = GetComponentInParent<Canvas>();
+            if (canvas != null)
+            {
+                Transform named = canvas.transform.Find("BottomPalette_Panel");
+                if (named is RectTransform namedRt)
+                    return namedRt;
+            }
+
+            if (paletteContainer == null)
+                return null;
+
+            Transform cur = paletteContainer.parent;
+            while (cur != null && cur.GetComponent<Canvas>() == null)
+            {
+                if (!IsScrollOrViewportTransform(cur) && cur is RectTransform dockRt)
+                    return dockRt;
+
+                cur = cur.parent;
+            }
+
+            return null;
+        }
+
+        private static bool IsScrollOrViewportTransform(Transform t)
+        {
+            if (t == null)
+                return false;
+
+            if (t.GetComponent<ScrollRect>() != null ||
+                t.GetComponent<Mask>() != null ||
+                t.GetComponent<RectMask2D>() != null)
+            {
+                return true;
+            }
+
+            return t.name.IndexOf("Viewport", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   t.name.IndexOf("Scroll", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static ScrollRect EnsureHorizontalScrollRect(Transform container, string wrapperName, float scrollSensitivity)
+        {
+            if (container == null)
+                return null;
+
+            var existingScroll = container.GetComponentInParent<ScrollRect>();
+            if (existingScroll != null)
+            {
+                if (existingScroll.content == null && container is RectTransform existingContentRt)
+                    existingScroll.content = existingContentRt;
+
+                return existingScroll;
+            }
+
+            var containerRt = container as RectTransform ?? container.GetComponent<RectTransform>();
+            if (containerRt == null || containerRt.parent == null)
+                return null;
+
+            Transform originalParent = containerRt.parent;
+            int siblingIndex = containerRt.GetSiblingIndex();
+
+            var scrollObj = new GameObject(
+                wrapperName,
+                typeof(RectTransform),
+                typeof(Image),
+                typeof(RectMask2D),
+                typeof(ScrollRect));
+            scrollObj.transform.SetParent(originalParent, false);
+            scrollObj.transform.SetSiblingIndex(siblingIndex);
+            scrollObj.layer = container.gameObject.layer;
+
+            var scrollRt = scrollObj.GetComponent<RectTransform>();
+            scrollRt.anchorMin = containerRt.anchorMin;
+            scrollRt.anchorMax = containerRt.anchorMax;
+            scrollRt.pivot = containerRt.pivot;
+            scrollRt.anchoredPosition = containerRt.anchoredPosition;
+            scrollRt.sizeDelta = containerRt.sizeDelta;
+            scrollRt.localScale = Vector3.one;
+
+            var raycastBg = scrollObj.GetComponent<Image>();
+            raycastBg.color = new Color(0f, 0f, 0f, 0f);
+            raycastBg.raycastTarget = true;
+
+            var innerMask = containerRt.GetComponent<RectMask2D>();
+            if (innerMask != null)
+            {
+                DestroyImmediate(innerMask);
+            }
+
+            containerRt.SetParent(scrollObj.transform, false);
+            containerRt.anchorMin = new Vector2(0f, 0f);
+            containerRt.anchorMax = new Vector2(0f, 1f);
+            containerRt.pivot = new Vector2(0f, 0.5f);
+            containerRt.anchoredPosition = Vector2.zero;
+            containerRt.sizeDelta = Vector2.zero;
+
+            var scrollRect = scrollObj.GetComponent<ScrollRect>();
+            scrollRect.viewport = scrollRt;
+            scrollRect.content = containerRt;
+            scrollRect.horizontal = true;
+            scrollRect.vertical = false;
+            scrollRect.movementType = ScrollRect.MovementType.Clamped;
+            scrollRect.scrollSensitivity = scrollSensitivity;
+
+            return scrollRect;
+        }
+
+        private void EnsureActiveIconAspectFallback()
+        {
+            if (activeItemIcon == null)
+                return;
+
+            activeItemIcon.preserveAspect = true;
+
+            Transform iconParent = activeItemIcon.transform.parent;
+            bool hasParentFrame = iconParent != null &&
+                (iconParent.GetComponent<AspectRatioFitter>() != null ||
+                 iconParent.GetComponent<LayoutGroup>() != null ||
+                 string.Equals(iconParent.name, "ActiveIcon_Frame", StringComparison.OrdinalIgnoreCase));
+
+            if (!hasParentFrame && activeItemIcon.GetComponent<AspectRatioFitter>() == null)
+            {
+                var fitter = activeItemIcon.gameObject.AddComponent<AspectRatioFitter>();
+                fitter.aspectMode = AspectRatioFitter.AspectMode.HeightControlsWidth;
+                fitter.aspectRatio = 1f;
+            }
+        }
+
+        private void EnsureLegacyToolbarButtons()
+        {
+            if (activeItemPanel == null)
+                return;
+
+            bool needsAny = rotateButton == null || mirrorButton == null || eraseButton == null;
+            if (!needsAny)
+                return;
+
+            Font font = ResolveToolbarFont();
+            var t = Theme;
+
+            if (rotateButton == null)
+            {
+                rotateButton = ResolveOrCreateLegacyToolbarButton(
+                    "BtnRotate",
+                    "Rotate [R]",
+                    0.500f,
+                    0.578f,
+                    t.neutralButtonColor,
+                    t.panelBorderColor,
+                    font);
+            }
+
+            if (mirrorButton == null)
+            {
+                mirrorButton = ResolveOrCreateLegacyToolbarButton(
+                    "BtnMirror",
+                    "Mirror [F]",
+                    0.582f,
+                    0.660f,
+                    t.neutralButtonColor,
+                    t.panelBorderColor,
+                    font);
+            }
+
+            if (eraseButton == null)
+            {
+                eraseButton = ResolveOrCreateLegacyToolbarButton(
+                    "BtnErase",
+                    "Erase [X]",
+                    0.664f,
+                    0.744f,
+                    t.eraseIdleColor,
+                    t.panelBorderColor,
+                    font);
+            }
+        }
+
+        private Button ResolveOrCreateLegacyToolbarButton(
+            string objectName,
+            string labelText,
+            float minX,
+            float maxX,
+            Color bgColor,
+            Color borderColor,
+            Font font)
+        {
+            var existing = FindChildComponent<Button>(
+                activeItemPanel.transform,
+                objectName,
+                "ToolbarActions_Container/" + objectName);
+            if (existing != null)
+                return existing;
+
+            var btnObj = new GameObject(objectName, typeof(RectTransform), typeof(Image), typeof(Button));
+            btnObj.transform.SetParent(activeItemPanel.transform, false);
+            btnObj.layer = activeItemPanel.layer;
+
+            SetAnchorRect(btnObj.GetComponent<RectTransform>(), new Vector2(minX, 0.16f), new Vector2(maxX, 0.84f));
+
+            var img = btnObj.GetComponent<Image>();
+            img.color = bgColor;
+            img.raycastTarget = true;
+
+            EnsureOutline(btnObj, borderColor);
+            EnsureShadowIfMissing(btnObj, new Vector2(0f, -2f), new Color(0f, 0f, 0f, 0.45f));
+
+            var btn = btnObj.GetComponent<Button>();
+            btn.targetGraphic = img;
+            ApplyNormalizedButtonColors(btn);
+
+            var labelObj = new GameObject("Label", typeof(RectTransform), typeof(Text));
+            labelObj.transform.SetParent(btnObj.transform, false);
+            labelObj.layer = btnObj.layer;
+            SetAnchorRect(labelObj.GetComponent<RectTransform>(), Vector2.zero, Vector2.one);
+
+            var label = labelObj.GetComponent<Text>();
+            label.text = labelText;
+            label.fontStyle = FontStyle.Bold;
+            label.alignment = TextAnchor.MiddleCenter;
+            label.color = Color.white;
+            label.font = font;
+            label.raycastTarget = false;
+            ConfigureTextElement(label, 13, 9, 14);
+
+            return btn;
+        }
+
+        private static Text FindChildText(Transform root, params string[] relativePaths)
+        {
+            return FindChildComponent<Text>(root, relativePaths);
+        }
+
+        private static T FindChildComponent<T>(Transform root, params string[] relativePaths) where T : Component
+        {
+            if (root == null || relativePaths == null)
+                return null;
+
+            for (int i = 0; i < relativePaths.Length; i++)
+            {
+                Transform child = root.Find(relativePaths[i]);
+                if (child != null)
+                {
+                    var comp = child.GetComponent<T>();
+                    if (comp != null)
+                        return comp;
+                }
+            }
+
+            return null;
+        }
+
+        private static void RemoveIncompatibleLayoutGroups<TKeep>(GameObject target) where TKeep : LayoutGroup
+        {
+            var groups = target.GetComponents<LayoutGroup>();
+            for (int i = 0; i < groups.Length; i++)
+            {
+                if (groups[i] != null && !(groups[i] is TKeep))
+                {
+                    DestroyImmediate(groups[i]);
+                }
+            }
+        }
+
+        private static void ApplyNormalizedButtonColors(Button button)
+        {
+            if (button == null)
+                return;
+
+            var colors = button.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(1.08f, 1.08f, 1.08f, 1f);
+            colors.pressedColor = new Color(0.90f, 0.90f, 0.90f, 1f);
+            colors.selectedColor = Color.white;
+            button.colors = colors;
+        }
+
+        private static Outline EnsureOutline(GameObject target, Color effectColor)
+        {
+            if (target == null)
+                return null;
+
+            var outline = target.GetComponent<Outline>();
+            if (outline == null)
+            {
+                outline = target.AddComponent<Outline>();
+                outline.effectDistance = new Vector2(1f, -1f);
+            }
+            outline.effectColor = effectColor;
+            return outline;
+        }
+
+        private static void EnsureShadowIfMissing(GameObject target, Vector2 effectDistance, Color effectColor)
+        {
+            if (target == null)
+                return;
+
+            var shadows = target.GetComponents<Shadow>();
+            for (int i = 0; i < shadows.Length; i++)
+            {
+                if (shadows[i] != null && shadows[i].GetType() == typeof(Shadow))
+                    return;
+            }
+
+            var shadow = target.AddComponent<Shadow>();
+            shadow.effectDistance = effectDistance;
+            shadow.effectColor = effectColor;
+        }
+
+        private static void SetAnchorRect(RectTransform rt, Vector2 anchorMin, Vector2 anchorMax)
+        {
+            if (rt == null)
+                return;
+
+            rt.anchorMin = anchorMin;
+            rt.anchorMax = anchorMax;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+        }
+
+        private static void ConfigureTextElement(Text text, int fontSize, int minSize, int maxSize)
+        {
+            if (text == null)
+                return;
+
+            text.fontSize = fontSize;
+            text.resizeTextForBestFit = true;
+            text.resizeTextMinSize = minSize;
+            text.resizeTextMaxSize = maxSize;
+        }
+
         private void ResolveBuildeableTilemap()
         {
-            if (buildeableTilemap != null) return;
+            if (buildeableTilemap != null)
+                return;
 
 #if UNITY_2023_1_OR_NEWER
             buildeableTilemap = FindAnyObjectByType<BuildeableTilemap>();
@@ -438,9 +722,11 @@ namespace TMBS.UI
             if (buildeableTilemap != null && evt.InstanceId != buildeableTilemap.InstanceId)
                 return;
 
-            RefreshActiveItemDisplay(evt.Selection.BuildableData, evt.Selection.BuildTile);
+            var displayData = ResolveDisplayDataFallback(evt.Selection.BuildableData, evt.Selection.BuildTile);
+            RefreshActiveItemDisplay(displayData, evt.Selection.BuildTile);
             HighlightSlotForSelection(evt.Selection.BuildableData, evt.Selection.BuildTile);
             RefreshEraseButtonVisual();
+            UpdatePendingCount();
         }
 
         private void OnTmbsValidationFailed(ValidationFailedEvent evt)
@@ -520,28 +806,63 @@ namespace TMBS.UI
             UpdatePendingCount();
         }
 
+        private static string NormalizeCategory(string rawCategory)
+        {
+            return string.IsNullOrWhiteSpace(rawCategory) ? "General" : rawCategory.Trim();
+        }
+
         public void BuildCategoryTabs()
         {
             _categories.Clear();
             _categories.Add("All");
 
-            foreach (var b in buildables)
+            var categoryCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+            int totalCount = 0;
+
+            if (buildables != null)
             {
-                if (b != null && !string.IsNullOrEmpty(b.category) && !_categories.Contains(b.category))
+                foreach (var b in buildables)
                 {
-                    _categories.Add(b.category);
+                    if (b == null)
+                        continue;
+
+                    string cat = NormalizeCategory(b.category);
+                    if (!_categories.Contains(cat))
+                    {
+                        _categories.Add(cat);
+                    }
+
+                    categoryCounts[cat] = categoryCounts.TryGetValue(cat, out int count) ? count + 1 : 1;
+                    totalCount++;
                 }
             }
 
-            foreach (var t in directTiles)
+            if (directTiles != null)
             {
-                if (t != null && !_categories.Contains("Tiles"))
+                foreach (var t in directTiles)
                 {
-                    _categories.Add("Tiles");
+                    if (t == null)
+                        continue;
+
+                    if (!_categories.Contains("Tiles"))
+                    {
+                        _categories.Add("Tiles");
+                    }
+
+                    categoryCounts["Tiles"] = categoryCounts.TryGetValue("Tiles", out int count) ? count + 1 : 1;
+                    totalCount++;
                 }
             }
 
-            if (categoryTabsContainer == null) return;
+            categoryCounts["All"] = totalCount;
+
+            if (!_categories.Contains(_activeCategory))
+            {
+                _activeCategory = "All";
+            }
+
+            if (categoryTabsContainer == null)
+                return;
 
             for (int i = categoryTabsContainer.childCount - 1; i >= 0; i--)
             {
@@ -552,49 +873,98 @@ namespace TMBS.UI
                     DestroyImmediate(child);
             }
             _instantiatedCategoryButtons.Clear();
+            _tabCategories.Clear();
+
+            var tabsLayout = categoryTabsContainer.GetComponent<HorizontalLayoutGroup>()
+                ?? categoryTabsContainer.gameObject.AddComponent<HorizontalLayoutGroup>();
+            tabsLayout.padding = new RectOffset(4, 4, 2, 2);
+            tabsLayout.spacing = 6f;
+            tabsLayout.childAlignment = TextAnchor.MiddleLeft;
+            tabsLayout.childControlWidth = true;
+            tabsLayout.childControlHeight = true;
+            tabsLayout.childForceExpandWidth = false;
+            tabsLayout.childForceExpandHeight = true;
+
+            var tabsFitter = categoryTabsContainer.GetComponent<ContentSizeFitter>()
+                ?? categoryTabsContainer.gameObject.AddComponent<ContentSizeFitter>();
+            tabsFitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            tabsFitter.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+
+            if (categoryTabsScrollRect != null && categoryTabsContainer is RectTransform tabsRt)
+            {
+                tabsRt.anchorMin = new Vector2(0f, 0f);
+                tabsRt.anchorMax = new Vector2(0f, 1f);
+                tabsRt.pivot = new Vector2(0f, 0.5f);
+                tabsRt.anchoredPosition = Vector2.zero;
+                tabsRt.sizeDelta = new Vector2(tabsRt.sizeDelta.x, 0f);
+                categoryTabsScrollRect.horizontal = true;
+                categoryTabsScrollRect.vertical = false;
+            }
 
             Font font = ResolveDefaultFont();
+            var themeSettings = Theme;
 
             foreach (var cat in _categories)
             {
                 string categoryName = cat;
+                int itemCount = categoryCounts.TryGetValue(categoryName, out int c) ? c : 0;
+                string displayLabel = $"{categoryName} ({itemCount})";
 
-                var tabObj = new GameObject($"Tab_{categoryName}", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
+                var tabObj = new GameObject(
+                    $"Tab_{categoryName}",
+                    typeof(RectTransform),
+                    typeof(Image),
+                    typeof(Button),
+                    typeof(LayoutElement));
                 tabObj.transform.SetParent(categoryTabsContainer, false);
-
-                var rt = tabObj.GetComponent<RectTransform>();
-                rt.sizeDelta = new Vector2(85f, 24f);
+                tabObj.layer = categoryTabsContainer.gameObject.layer;
 
                 var layoutElement = tabObj.GetComponent<LayoutElement>();
-                layoutElement.minWidth = 84f;
-                layoutElement.preferredWidth = Mathf.Max(88f, categoryName.Length * 10f + 24f);
+                layoutElement.minWidth = 72f;
+                layoutElement.preferredWidth = Mathf.Max(80f, displayLabel.Length * 8.5f + 24f);
                 layoutElement.preferredHeight = 28f;
 
                 var btn = tabObj.GetComponent<Button>();
-                var colors = btn.colors;
-                colors.normalColor = Color.white;
-                colors.highlightedColor = new Color(1.15f, 1.15f, 1.15f, 1f);
-                colors.pressedColor = new Color(0.8f, 0.8f, 0.8f, 1f);
-                colors.selectedColor = Color.white;
-                btn.colors = colors;
-
-                EnsureOutline(tabObj, SurfaceOutlineColor);
+                var bgImg = tabObj.GetComponent<Image>();
+                btn.targetGraphic = bgImg;
+                ApplyNormalizedButtonColors(btn);
+                EnsureOutline(tabObj, themeSettings.panelBorderColor);
 
                 btn.onClick.AddListener(() => SetCategoryFilter(categoryName));
 
+                var indicatorObj = new GameObject("CategoryIndicator", typeof(RectTransform), typeof(Image));
+                indicatorObj.transform.SetParent(tabObj.transform, false);
+                indicatorObj.layer = tabObj.layer;
+                var indRt = indicatorObj.GetComponent<RectTransform>();
+                indRt.anchorMin = new Vector2(0f, 0f);
+                indRt.anchorMax = new Vector2(1f, 0f);
+                indRt.pivot = new Vector2(0.5f, 0f);
+                indRt.anchoredPosition = Vector2.zero;
+                indRt.sizeDelta = new Vector2(0f, 2.5f);
+                var indImg = indicatorObj.GetComponent<Image>();
+                indImg.raycastTarget = false;
+                indImg.color = string.Equals(categoryName, "All", StringComparison.Ordinal)
+                    ? themeSettings.headerAccentColor
+                    : themeSettings.ResolveCategoryColor(categoryName);
+
                 var labelObj = new GameObject("Label", typeof(RectTransform), typeof(Text));
                 labelObj.transform.SetParent(tabObj.transform, false);
+                labelObj.layer = tabObj.layer;
                 var labelRt = labelObj.GetComponent<RectTransform>();
-                SetAnchorRect(labelRt, Vector2.zero, Vector2.one);
+                labelRt.anchorMin = new Vector2(0f, 0.08f);
+                labelRt.anchorMax = Vector2.one;
+                labelRt.offsetMin = new Vector2(6f, 1f);
+                labelRt.offsetMax = new Vector2(-6f, -1f);
 
                 var txt = labelObj.GetComponent<Text>();
-                txt.text = categoryName;
+                txt.text = displayLabel;
                 txt.alignment = TextAnchor.MiddleCenter;
                 txt.font = font;
                 txt.raycastTarget = false;
-                ConfigureTextElement(txt, 13, 9, 14);
+                ConfigureTextElement(txt, 12, 9, 13);
 
                 _instantiatedCategoryButtons.Add(btn);
+                _tabCategories.Add(categoryName);
             }
 
             RefreshCategoryTabVisuals();
@@ -602,36 +972,37 @@ namespace TMBS.UI
 
         private void RefreshCategoryTabVisuals()
         {
+            var t = Theme;
+
             for (int i = 0; i < _instantiatedCategoryButtons.Count; i++)
             {
                 var btn = _instantiatedCategoryButtons[i];
-                if (btn == null) continue;
+                if (btn == null)
+                    continue;
 
-                var label = btn.GetComponentInChildren<Text>();
-                string categoryName = label != null
-                    ? label.text
-                    : (i < _categories.Count ? _categories[i] : null);
-                bool isActive = categoryName == _activeCategory;
+                string categoryName = i < _tabCategories.Count ? _tabCategories[i] : null;
+                bool isActive = string.Equals(categoryName, _activeCategory, StringComparison.Ordinal);
 
                 var img = btn.GetComponent<Image>();
                 if (img != null)
                 {
-                    img.color = isActive ? ActiveTabColor : InactiveTabColor;
+                    img.color = isActive ? t.tabActiveColor : t.tabInactiveColor;
                 }
 
-                EnsureOutline(btn.gameObject, isActive ? AccentAmberColor : SurfaceOutlineColor);
+                EnsureOutline(btn.gameObject, isActive ? t.selectionBorderColor : t.panelBorderColor);
 
+                var label = btn.GetComponentInChildren<Text>(true);
                 if (label != null)
                 {
                     label.fontStyle = isActive ? FontStyle.Bold : FontStyle.Normal;
-                    label.color = isActive ? new Color(1f, 0.96f, 0.84f, 1f) : new Color(0.80f, 0.83f, 0.88f, 0.92f);
+                    label.color = isActive ? t.slotSelectedLabelColor : t.slotNormalLabelColor;
                 }
             }
         }
 
         public void SetCategoryFilter(string category)
         {
-            _activeCategory = category;
+            _activeCategory = string.IsNullOrWhiteSpace(category) ? "All" : category.Trim();
             RefreshCategoryTabVisuals();
             BuildPalette();
         }
@@ -651,26 +1022,51 @@ namespace TMBS.UI
             }
             _instantiatedSlots.Clear();
 
-            foreach (var data in buildables)
-            {
-                if (data == null) continue;
-                if (_activeCategory != "All" && data.category != _activeCategory) continue;
+            var themeSettings = Theme;
 
-                var slot = CreateSlotInstance();
-                if (slot == null) continue;
-                slot.Setup(data, OnSlotClicked);
-                _instantiatedSlots.Add(slot);
+            if (buildables != null)
+            {
+                foreach (var data in buildables)
+                {
+                    if (data == null)
+                        continue;
+
+                    string cat = NormalizeCategory(data.category);
+                    if (!string.Equals(_activeCategory, "All", StringComparison.Ordinal) &&
+                        !string.Equals(cat, _activeCategory, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    var slot = CreateSlotInstance();
+                    if (slot == null)
+                        continue;
+
+                    slot.Setup(data, OnSlotClicked, themeSettings);
+                    _instantiatedSlots.Add(slot);
+                }
             }
 
-            foreach (var tile in directTiles)
+            if (directTiles != null)
             {
-                if (tile == null) continue;
-                if (_activeCategory != "All" && _activeCategory != "Tiles") continue;
+                foreach (var tile in directTiles)
+                {
+                    if (tile == null)
+                        continue;
 
-                var slot = CreateSlotInstance();
-                if (slot == null) continue;
-                slot.Setup(tile, tile.name, null, "Tiles", OnSlotClicked);
-                _instantiatedSlots.Add(slot);
+                    if (!string.Equals(_activeCategory, "All", StringComparison.Ordinal) &&
+                        !string.Equals(_activeCategory, "Tiles", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    var slot = CreateSlotInstance();
+                    if (slot == null)
+                        continue;
+
+                    slot.Setup(tile, tile.name, null, "Tiles", OnSlotClicked, themeSettings);
+                    _instantiatedSlots.Add(slot);
+                }
             }
 
             for (int i = 0; i < _instantiatedSlots.Count; i++)
@@ -678,22 +1074,60 @@ namespace TMBS.UI
                 _instantiatedSlots[i].SetHotkeyIndex(i < 9 ? i + 1 : 0);
             }
 
+            if (paletteHeaderText != null)
+            {
+                paletteHeaderText.text = $"BUILD CATALOG ({_instantiatedSlots.Count})  \u00B7  Hotkeys 1-9";
+            }
+
+            TileBase curTile = null;
+            TmbsBuildableData curData = null;
             if (buildeableTilemap != null && buildeableTilemap.CurrentBuildable != null)
             {
-                var curTile = buildeableTilemap.CurrentBuildable.ResolvePrimaryTile();
-                var curData = buildeableTilemap.CurrentBuildable.ResolveData();
-                HighlightSlotForSelection(curData, curTile);
-                RefreshActiveItemDisplay(curData, curTile);
+                curTile = buildeableTilemap.CurrentBuildable.ResolvePrimaryTile();
+                curData = buildeableTilemap.CurrentBuildable.ResolveData();
             }
-            else if (!_hasUserClearedSelection && _instantiatedSlots.Count > 0)
+
+            if (curData != null || curTile != null)
+            {
+                var resolvedDisplayData = ResolveDisplayDataFallback(curData, curTile);
+                HighlightSlotForSelection(curData, curTile);
+                RefreshActiveItemDisplay(curData ?? resolvedDisplayData, curTile);
+            }
+            else if (!_hasInitializedPalette &&
+                     !_hasUserClearedSelection &&
+                     _instantiatedSlots.Count > 0 &&
+                     (buildeableTilemap == null || !buildeableTilemap.IsEraseMode))
             {
                 OnSlotClicked(_instantiatedSlots[0]);
             }
             else
             {
                 HighlightSlot(null);
-                RefreshActiveItemDisplay(null, null);
+                RefreshCurrentSelectionDisplay();
             }
+
+            _hasInitializedPalette = true;
+        }
+
+        private TmbsBuildableData ResolveDisplayDataFallback(TmbsBuildableData data, TileBase tile)
+        {
+            if (data != null || tile == null)
+                return data;
+
+            if (directTiles != null && directTiles.Contains(tile))
+                return null;
+
+            if (buildables != null)
+            {
+                for (int i = 0; i < buildables.Count; i++)
+                {
+                    var b = buildables[i];
+                    if (b != null && b.tile == tile)
+                        return b;
+                }
+            }
+
+            return null;
         }
 
         private TmbsPaletteSlot CreateSlotInstance()
@@ -709,7 +1143,8 @@ namespace TMBS.UI
 
         private void OnSlotClicked(TmbsPaletteSlot clickedSlot)
         {
-            if (clickedSlot == null || buildeableTilemap == null) return;
+            if (clickedSlot == null || buildeableTilemap == null)
+                return;
 
             _hasUserClearedSelection = false;
 
@@ -741,19 +1176,41 @@ namespace TMBS.UI
         {
             TmbsPaletteSlot matched = null;
 
-            foreach (var slot in _instantiatedSlots)
+            if (data != null)
             {
-                if (slot == null) continue;
-
-                if (data != null && slot.BuildableData == data)
+                for (int i = 0; i < _instantiatedSlots.Count; i++)
                 {
-                    matched = slot;
-                    break;
+                    var slot = _instantiatedSlots[i];
+                    if (slot != null && slot.BuildableData == data)
+                    {
+                        matched = slot;
+                        break;
+                    }
                 }
-                if (tile != null && slot.DirectTile == tile)
+            }
+            else if (tile != null)
+            {
+                for (int i = 0; i < _instantiatedSlots.Count; i++)
                 {
-                    matched = slot;
-                    break;
+                    var slot = _instantiatedSlots[i];
+                    if (slot != null && slot.IsDirectTileSlot && slot.DirectTile == tile)
+                    {
+                        matched = slot;
+                        break;
+                    }
+                }
+
+                if (matched == null)
+                {
+                    for (int i = 0; i < _instantiatedSlots.Count; i++)
+                    {
+                        var slot = _instantiatedSlots[i];
+                        if (slot != null && slot.DirectTile == tile)
+                        {
+                            matched = slot;
+                            break;
+                        }
+                    }
                 }
             }
 
@@ -763,19 +1220,24 @@ namespace TMBS.UI
         private void RefreshCurrentSelectionDisplay()
         {
             var current = buildeableTilemap != null ? buildeableTilemap.CurrentBuildable : null;
-            RefreshActiveItemDisplay(current?.ResolveData(), current?.ResolvePrimaryTile());
+            var curData = current != null ? current.ResolveData() : null;
+            var curTile = current != null ? current.ResolvePrimaryTile() : null;
+            RefreshActiveItemDisplay(ResolveDisplayDataFallback(curData, curTile), curTile);
         }
 
         private void RefreshActiveItemDisplay(TmbsBuildableData data, TileBase tile)
         {
+            UpdateUndoRedoInteractability();
+
             if (buildeableTilemap != null && buildeableTilemap.IsEraseMode)
             {
-                if (_titleText != null) _titleText.text = "ERASE MODE";
+                if (titleText != null) titleText.text = "ERASE MODE";
                 if (activeItemNameText != null) activeItemNameText.text = "Mode: Erase";
-                bool isPending = buildeableTilemap.RootConfig != null && buildeableTilemap.RootConfig.executionMode == ExecutionMode.Pending;
+                bool isPendingMode = buildeableTilemap.RootConfig != null &&
+                                     buildeableTilemap.RootConfig.executionMode == ExecutionMode.Pending;
                 if (activeItemDetailsText != null)
                 {
-                    activeItemDetailsText.text = isPending
+                    activeItemDetailsText.text = isPendingMode
                         ? "Pending: Click or drag to cancel orders or queue demolition."
                         : "Immediate: Click or drag to erase cells.";
                 }
@@ -790,9 +1252,9 @@ namespace TMBS.UI
 
             if (data == null && tile == null)
             {
-                if (_titleText != null) _titleText.text = "INSPECT MODE";
+                if (titleText != null) titleText.text = "INSPECT MODE";
                 if (activeItemNameText != null) activeItemNameText.text = "Mode: Inspect";
-                if (activeItemDetailsText != null) activeItemDetailsText.text = "Select a block from the palette to build.";
+                if (activeItemDetailsText != null) activeItemDetailsText.text = "Select an item from the catalog to build.";
                 if (activeItemIcon != null)
                 {
                     activeItemIcon.enabled = false;
@@ -802,20 +1264,34 @@ namespace TMBS.UI
                 return;
             }
 
-            if (_titleText != null) _titleText.text = "BUILD MODE";
+            if (titleText != null) titleText.text = "BUILD MODE";
 
-            string displayName = data != null ? data.displayName : (tile != null ? tile.name : "Tile");
-            string category = data != null ? data.category : "Tiles";
+            string displayName = data != null
+                ? (!string.IsNullOrEmpty(data.displayName) ? data.displayName : data.name)
+                : tile.name;
+            string category = data != null ? NormalizeCategory(data.category) : "Tiles";
             int work = data != null ? data.workCost : 1;
             int res = data != null ? data.resourceCost : 0;
             Vector2Int sz = data != null ? data.GetSize() : Vector2Int.one;
 
             if (activeItemNameText != null)
             {
-                activeItemNameText.text = $"Building: {displayName}";
+                activeItemNameText.text = displayName;
             }
 
-            string transformInfo = "";
+            var t = Theme;
+            bool isPending = buildeableTilemap != null &&
+                             buildeableTilemap.RootConfig != null &&
+                             buildeableTilemap.RootConfig.executionMode == ExecutionMode.Pending;
+
+            var parts = new List<string>(6);
+            parts.Add($"Size: {sz.x}\u00D7{sz.y}");
+            parts.Add($"Category: {category}");
+            if (!t.hideZeroCostInHud || isPending || work > 1)
+                parts.Add($"Work: {work}");
+            if (!t.hideZeroCostInHud || res > 0)
+                parts.Add($"Cost: {t.resourceCostPrefix}{res}");
+
             int rotation = 0;
             bool mirrored = false;
             if (buildeableTilemap != null)
@@ -823,16 +1299,15 @@ namespace TMBS.UI
                 var tr = buildeableTilemap.CurrentTransform;
                 rotation = tr.Rotation;
                 mirrored = tr.Mirrored;
-                if (rotation != 0 || mirrored)
-                {
-                    string mirrorStr = mirrored ? " | Mirrored" : "";
-                    transformInfo = $"  |  {rotation * 90} deg{mirrorStr}";
-                }
+                if (rotation != 0)
+                    parts.Add($"{rotation * 90}\u00B0");
+                if (mirrored)
+                    parts.Add("Mirrored");
             }
 
             if (activeItemDetailsText != null)
             {
-                activeItemDetailsText.text = $"Size: {sz.x}x{sz.y}  |  Category: {category}  |  Work: {work}  |  Cost: {res}{transformInfo}";
+                activeItemDetailsText.text = string.Join("  \u00B7  ", parts);
             }
 
             if (activeItemIcon != null)
@@ -845,15 +1320,33 @@ namespace TMBS.UI
             }
         }
 
+        private void UpdateUndoRedoInteractability()
+        {
+            bool enabled = buildeableTilemap?.RootConfig?.history == null ||
+                           buildeableTilemap.RootConfig.history.enableUndoRedo;
+
+            if (undoButton != null)
+                undoButton.interactable = enabled;
+
+            if (redoButton != null)
+                redoButton.interactable = enabled;
+        }
+
         public void ShowToast(string message, bool isWarning = false)
         {
-            if (toastPanel == null || toastText == null) return;
-            if (!gameObject.activeInHierarchy) return;
+            if (toastPanel == null || toastText == null)
+                return;
 
-            ApplySurfaceStyle(
-                toastPanel,
-                isWarning ? WarningToastColor : InfoToastColor,
-                isWarning ? new Color(0.95f, 0.35f, 0.35f, 1f) : SurfaceOutlineColor);
+            if (!gameObject.activeInHierarchy)
+                return;
+
+            var t = Theme;
+            var img = toastPanel.GetComponent<Image>();
+            if (img != null)
+            {
+                img.color = isWarning ? t.warningToastColor : t.infoToastColor;
+            }
+            EnsureOutline(toastPanel, isWarning ? t.warningBorderColor : t.panelBorderColor);
 
             toastText.text = message;
             toastPanel.SetActive(true);
@@ -866,7 +1359,7 @@ namespace TMBS.UI
 
         private IEnumerator HideToastRoutine(float delay)
         {
-            yield return new WaitForSeconds(delay);
+            yield return new WaitForSecondsRealtime(delay);
             if (toastPanel != null)
             {
                 toastPanel.SetActive(false);
@@ -902,36 +1395,16 @@ namespace TMBS.UI
             HookButton(clearButton, OnClearClicked);
             HookButton(undoButton, OnUndoClicked);
             HookButton(redoButton, OnRedoClicked);
+            HookButton(toggleExpandCatalogButton, ToggleCatalogExpanded);
         }
 
         private static void HookButton(Button button, UnityEngine.Events.UnityAction handler)
         {
-            if (button == null) return;
+            if (button == null)
+                return;
+
             button.onClick.RemoveAllListeners();
             button.onClick.AddListener(handler);
-        }
-
-        private void EnsureToolbarButtons()
-        {
-            if (activeItemPanel != null)
-            {
-                Font font = ResolveToolbarFont();
-                if (rotateButton == null)
-                    rotateButton = FindOrCreateToolbarButton("BtnRotate", "Rotate [R]", font);
-                if (mirrorButton == null)
-                    mirrorButton = FindOrCreateToolbarButton("BtnMirror", "Mirror [F]", font);
-                if (eraseButton == null)
-                    eraseButton = FindOrCreateToolbarButton("BtnErase", "Erase [X]", font);
-            }
-
-            ConfigureToolbarButton(rotateButton, 0.500f, 0.578f, NeutralButtonColor);
-            ConfigureToolbarButton(mirrorButton, 0.582f, 0.660f, NeutralButtonColor);
-            ConfigureToolbarButton(eraseButton, 0.664f, 0.744f, EraseNormalColor);
-            ConfigureToolbarButton(clearButton, 0.748f, 0.826f, DestructiveIdleColor);
-            ConfigureToolbarButton(undoButton, 0.834f, 0.910f, NeutralButtonColor);
-            ConfigureToolbarButton(redoButton, 0.914f, 0.990f, NeutralButtonColor);
-
-            RefreshEraseButtonVisual();
         }
 
         private Font ResolveToolbarFont()
@@ -940,9 +1413,7 @@ namespace TMBS.UI
             {
                 var undoLabel = undoButton.GetComponentInChildren<Text>(true);
                 if (undoLabel != null && undoLabel.font != null)
-                {
                     return undoLabel.font;
-                }
             }
             return ResolveDefaultFont();
         }
@@ -960,51 +1431,30 @@ namespace TMBS.UI
             return _defaultFont;
         }
 
-        private Button FindOrCreateToolbarButton(string objectName, string labelText, Font font)
-        {
-            Transform existing = activeItemPanel.transform.Find(objectName);
-            if (existing != null)
-            {
-                var existingBtn = existing.GetComponent<Button>();
-                if (existingBtn != null) return existingBtn;
-            }
-
-            var btnObj = new GameObject(objectName, typeof(RectTransform), typeof(Image), typeof(Button));
-            btnObj.transform.SetParent(activeItemPanel.transform, false);
-            btnObj.GetComponent<Image>().raycastTarget = true;
-
-            var labelObj = new GameObject("Label", typeof(RectTransform), typeof(Text));
-            labelObj.transform.SetParent(btnObj.transform, false);
-            SetAnchorRect(labelObj.GetComponent<RectTransform>(), Vector2.zero, Vector2.one);
-
-            var label = labelObj.GetComponent<Text>();
-            label.text = labelText;
-            label.fontStyle = FontStyle.Bold;
-            label.alignment = TextAnchor.MiddleCenter;
-            label.color = Color.white;
-            label.font = font;
-            label.raycastTarget = false;
-
-            return btnObj.GetComponent<Button>();
-        }
-
-        private static void ConfigureToolbarButton(Button button, float minX, float maxX, Color bgColor)
-        {
-            if (button == null) return;
-            SetAnchorRect(button.GetComponent<RectTransform>(), new Vector2(minX, 0.16f), new Vector2(maxX, 0.84f));
-            ApplyButtonVisual(button, bgColor, SurfaceOutlineColor, 13, 9, 14);
-        }
-
         private void RefreshEraseButtonVisual()
         {
-            if (eraseButton == null) return;
+            if (eraseButton == null)
+                return;
 
             bool active = buildeableTilemap != null && buildeableTilemap.IsEraseMode;
-            ApplyButtonVisual(
-                eraseButton,
-                active ? EraseActiveColor : EraseNormalColor,
-                active ? AccentAmberColor : SurfaceOutlineColor,
-                13, 9, 14);
+            var t = Theme;
+
+            var img = eraseButton.GetComponent<Image>();
+            if (img != null)
+            {
+                img.color = active ? t.eraseActiveColor : t.eraseIdleColor;
+                if (eraseButton.targetGraphic == null)
+                    eraseButton.targetGraphic = img;
+            }
+
+            if (eraseButton.colors.normalColor == Color.white && eraseButton.colors.selectedColor != Color.white)
+            {
+                var colors = eraseButton.colors;
+                colors.selectedColor = Color.white;
+                eraseButton.colors = colors;
+            }
+
+            EnsureOutline(eraseButton.gameObject, active ? t.selectionBorderColor : t.panelBorderColor);
 
             var label = eraseButton.GetComponentInChildren<Text>(true);
             if (label != null)
@@ -1015,30 +1465,33 @@ namespace TMBS.UI
 
         public void OnRotateClicked()
         {
-            if (buildeableTilemap == null) return;
+            if (buildeableTilemap == null)
+                return;
 
             buildeableTilemap.Rotate();
             RefreshCurrentSelectionDisplay();
 
             var tr = buildeableTilemap.CurrentTransform;
-            string mirrorStr = tr.Mirrored ? " | Mirrored" : "";
-            ShowToast($"Rotation: {tr.Rotation * 90} deg{mirrorStr}", false);
+            string mirrorStr = tr.Mirrored ? " \u00B7 Mirrored" : "";
+            ShowToast($"Rotation: {tr.Rotation * 90}\u00B0{mirrorStr}", false);
         }
 
         public void OnMirrorClicked()
         {
-            if (buildeableTilemap == null) return;
+            if (buildeableTilemap == null)
+                return;
 
             buildeableTilemap.Mirror();
             RefreshCurrentSelectionDisplay();
 
             var tr = buildeableTilemap.CurrentTransform;
-            ShowToast(tr.Mirrored ? $"Mirrored ({tr.Rotation * 90} deg)" : $"Unmirrored ({tr.Rotation * 90} deg)", false);
+            ShowToast(tr.Mirrored ? $"Mirrored ({tr.Rotation * 90}\u00B0)" : $"Unmirrored ({tr.Rotation * 90}\u00B0)", false);
         }
 
         public void OnUndoClicked()
         {
-            if (buildeableTilemap == null) return;
+            if (buildeableTilemap == null)
+                return;
 
             if (buildeableTilemap.RootConfig?.history != null && !buildeableTilemap.RootConfig.history.enableUndoRedo)
             {
@@ -1052,7 +1505,8 @@ namespace TMBS.UI
 
         public void OnRedoClicked()
         {
-            if (buildeableTilemap == null) return;
+            if (buildeableTilemap == null)
+                return;
 
             if (buildeableTilemap.RootConfig?.history != null && !buildeableTilemap.RootConfig.history.enableUndoRedo)
             {
@@ -1079,7 +1533,8 @@ namespace TMBS.UI
 
         public void OnEraseClicked()
         {
-            if (buildeableTilemap == null) return;
+            if (buildeableTilemap == null)
+                return;
 
             bool nextState = !buildeableTilemap.IsEraseMode;
             _hasUserClearedSelection = nextState;
@@ -1095,8 +1550,25 @@ namespace TMBS.UI
             ShowToast(nextState ? "Erase mode enabled." : "Erase mode disabled.");
         }
 
+        private static bool IsTypingInUiInputField()
+        {
+            var eventSystem = EventSystem.current;
+            if (eventSystem == null)
+                return false;
+
+            var selected = eventSystem.currentSelectedGameObject;
+            if (selected == null)
+                return false;
+
+            return selected.GetComponent<InputField>() != null ||
+                   selected.GetComponent("TMP_InputField") != null;
+        }
+
         private void HandlePaletteHotkeys()
         {
+            if (IsTypingInUiInputField())
+                return;
+
 #if ENABLE_INPUT_SYSTEM
             var keyboard = Keyboard.current;
             if (keyboard != null)
@@ -1108,6 +1580,14 @@ namespace TMBS.UI
                     OnClearClicked();
                     return;
                 }
+
+                bool hasModifier = keyboard.ctrlKey.isPressed ||
+                                   keyboard.altKey.isPressed ||
+                                   keyboard.leftMetaKey.isPressed ||
+                                   keyboard.rightMetaKey.isPressed;
+
+                if (hasModifier)
+                    return;
 
                 if (keyboard.xKey.wasPressedThisFrame)
                 {
@@ -1135,6 +1615,18 @@ namespace TMBS.UI
                 return;
             }
 
+            bool legacyModifier = Input.GetKey(KeyCode.LeftControl) ||
+                                  Input.GetKey(KeyCode.RightControl) ||
+                                  Input.GetKey(KeyCode.LeftAlt) ||
+                                  Input.GetKey(KeyCode.RightAlt) ||
+                                  Input.GetKey(KeyCode.LeftCommand) ||
+                                  Input.GetKey(KeyCode.RightCommand) ||
+                                  Input.GetKey(KeyCode.LeftWindows) ||
+                                  Input.GetKey(KeyCode.RightWindows);
+
+            if (legacyModifier)
+                return;
+
             if (Input.GetKeyDown(KeyCode.X))
             {
                 OnEraseClicked();
@@ -1161,7 +1653,11 @@ namespace TMBS.UI
 #endif
             if (existing == null && EventSystem.current == null)
             {
+#if ENABLE_INPUT_SYSTEM && !ENABLE_LEGACY_INPUT_MANAGER
+                new GameObject("EventSystem", typeof(EventSystem), typeof(UnityEngine.InputSystem.UI.InputSystemUIInputModule));
+#else
                 new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+#endif
             }
         }
     }

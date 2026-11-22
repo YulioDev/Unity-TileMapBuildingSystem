@@ -14,11 +14,13 @@ namespace TMBS.Editor.InputConfigurator
             AllSetup = 0,
             Mode = 1,
             Controls = 2,
-            LiveTest = 3
+            LiveTest = 3,
+            Buildables = 4
         }
 
         private TmbsRootConfig _targetConfig;
         private TabSection _activeTab = TabSection.AllSetup;
+        private TmbsBuildableData _pendingSelectBuildable;
 
         private ObjectField _configField;
         private Button _pingConfigBtn;
@@ -26,11 +28,14 @@ namespace TMBS.Editor.InputConfigurator
         private Button _navModeBtn;
         private Button _navControlsBtn;
         private Button _navLiveBtn;
+        private Button _navBuildablesBtn;
 
         private VisualElement _noConfigBanner;
+        private Label _headerSubtitleLabel;
         private ModeCardsView _modeCardsView;
         private ControlsView _controlsView;
         private LiveTesterView _liveTesterView;
+        private BuildablesPageView _buildablesView;
         private ScrollView _contentScroll;
 
         private Label _footerBoundLabel;
@@ -38,7 +43,19 @@ namespace TMBS.Editor.InputConfigurator
         private Label _footerModeLabel;
         private Button _revertBtn;
 
-        [MenuItem("Window/TMBS/Input Configurator")]
+        [MenuItem("Window/TMBS/TMBS Settings", false, 1)]
+        public static void ShowSettingsWindow()
+        {
+            Open(null);
+        }
+
+        [MenuItem("Window/TMBS/Buildables", false, 2)]
+        public static void ShowBuildablesWindow()
+        {
+            OpenBuildable(null);
+        }
+
+        [MenuItem("Window/TMBS/Input Configurator", false, 20)]
         public static void ShowWindow()
         {
             Open(null);
@@ -46,13 +63,35 @@ namespace TMBS.Editor.InputConfigurator
 
         public static void Open(TmbsRootConfig targetConfig = null)
         {
-            var window = GetWindow<TmbsInputConfiguratorWindow>("TMBS Input");
+            var window = GetWindow<TmbsInputConfiguratorWindow>("TMBS Settings");
             window.minSize = new Vector2(880, 560);
             if (targetConfig != null)
                 window.SetTargetConfig(targetConfig);
             else if (window._targetConfig == null)
                 window.AutoDiscoverConfig();
             window.Show();
+        }
+
+        public static void OpenBuildable(TmbsBuildableData buildable = null)
+        {
+            var window = GetWindow<TmbsInputConfiguratorWindow>("TMBS Settings");
+            window.minSize = new Vector2(880, 560);
+            if (window._targetConfig == null)
+                window.AutoDiscoverConfig();
+
+            window._pendingSelectBuildable = buildable;
+            window.SetActiveTab(TabSection.Buildables);
+            window.Show();
+
+            if (window._buildablesView != null)
+            {
+                if (buildable != null)
+                    window._buildablesView.SelectBuildable(buildable);
+                else
+                    window._buildablesView.Refresh();
+
+                window._pendingSelectBuildable = null;
+            }
         }
 
         private void OnEnable()
@@ -106,12 +145,23 @@ namespace TMBS.Editor.InputConfigurator
             _liveTesterView = new LiveTesterView();
             _contentScroll.Add(_liveTesterView);
 
+            _buildablesView = new BuildablesPageView();
+            _buildablesView.CatalogChanged += RefreshFooter;
+            _contentScroll.Add(_buildablesView);
+
             BuildFooter(root);
 
             if (_targetConfig == null)
                 AutoDiscoverConfig();
 
             RefreshAll();
+
+            if (_pendingSelectBuildable != null)
+            {
+                _buildablesView.SelectBuildable(_pendingSelectBuildable);
+                _pendingSelectBuildable = null;
+            }
+
             SetActiveTab(_activeTab);
 
             root.schedule.Execute(() => _liveTesterView?.TickUI()).Every(100);
@@ -142,13 +192,13 @@ namespace TMBS.Editor.InputConfigurator
             titleGroup.AddToClassList("tmbs-title-group");
             header.Add(titleGroup);
 
-            var title = new Label("TMBS Input Configurator");
+            var title = new Label("TMBS Settings");
             title.AddToClassList("tmbs-title");
             titleGroup.Add(title);
 
-            var sub = new Label("Input & Binding Settings");
-            sub.AddToClassList("tmbs-subtitle");
-            titleGroup.Add(sub);
+            _headerSubtitleLabel = new Label("Input, Controls & Buildables Studio");
+            _headerSubtitleLabel.AddToClassList("tmbs-subtitle");
+            titleGroup.Add(_headerSubtitleLabel);
 
             var picker = new VisualElement();
             picker.AddToClassList("tmbs-config-picker");
@@ -183,15 +233,17 @@ namespace TMBS.Editor.InputConfigurator
             rail.AddToClassList("tmbs-nav-rail");
             body.Add(rail);
 
-            _navAllBtn = CreateNavButton("Overview", TabSection.AllSetup);
-            _navModeBtn = CreateNavButton("1. Mode", TabSection.Mode);
+            _navAllBtn = CreateNavButton("Input Overview", TabSection.AllSetup);
+            _navModeBtn = CreateNavButton("1. Input Mode", TabSection.Mode);
             _navControlsBtn = CreateNavButton("2. Controls", TabSection.Controls);
             _navLiveBtn = CreateNavButton("3. Live Test", TabSection.LiveTest);
+            _navBuildablesBtn = CreateNavButton("4. Buildables", TabSection.Buildables);
 
             rail.Add(_navAllBtn);
             rail.Add(_navModeBtn);
             rail.Add(_navControlsBtn);
             rail.Add(_navLiveBtn);
+            rail.Add(_navBuildablesBtn);
         }
 
         private Button CreateNavButton(string label, TabSection section)
@@ -260,27 +312,41 @@ namespace TMBS.Editor.InputConfigurator
             _navModeBtn?.EnableInClassList("tmbs-nav-btn--active", tab == TabSection.Mode);
             _navControlsBtn?.EnableInClassList("tmbs-nav-btn--active", tab == TabSection.Controls);
             _navLiveBtn?.EnableInClassList("tmbs-nav-btn--active", tab == TabSection.LiveTest);
+            _navBuildablesBtn?.EnableInClassList("tmbs-nav-btn--active", tab == TabSection.Buildables);
+
+            if (_headerSubtitleLabel != null)
+            {
+                if (tab == TabSection.Buildables)
+                    _headerSubtitleLabel.text = "Buildables Catalog, Properties & Taxonomy";
+                else if (tab == TabSection.LiveTest)
+                    _headerSubtitleLabel.text = "Live Input Telemetry & Diagnostics";
+                else
+                    _headerSubtitleLabel.text = "Input Mode & Binding Configuration";
+            }
 
             UpdateSectionVisibility();
+            RefreshFooter();
         }
 
         private void UpdateSectionVisibility()
         {
-            if (_modeCardsView == null || _controlsView == null || _liveTesterView == null)
+            if (_modeCardsView == null || _controlsView == null || _liveTesterView == null || _buildablesView == null)
                 return;
 
             bool hasConfig = _targetConfig != null;
-            _noConfigBanner.style.display = (!hasConfig && _activeTab != TabSection.LiveTest)
+            _noConfigBanner.style.display = (!hasConfig && _activeTab != TabSection.LiveTest && _activeTab != TabSection.Buildables)
                 ? DisplayStyle.Flex
                 : DisplayStyle.None;
 
             bool showMode = hasConfig && (_activeTab == TabSection.AllSetup || _activeTab == TabSection.Mode);
             bool showControls = hasConfig && (_activeTab == TabSection.AllSetup || _activeTab == TabSection.Controls);
             bool showLive = _activeTab == TabSection.LiveTest;
+            bool showBuildables = _activeTab == TabSection.Buildables;
 
             _modeCardsView.style.display = showMode ? DisplayStyle.Flex : DisplayStyle.None;
             _controlsView.style.display = showControls ? DisplayStyle.Flex : DisplayStyle.None;
             _liveTesterView.style.display = showLive ? DisplayStyle.Flex : DisplayStyle.None;
+            _buildablesView.style.display = showBuildables ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
         public void SetTargetConfig(TmbsRootConfig config)
@@ -378,6 +444,7 @@ namespace TMBS.Editor.InputConfigurator
             _modeCardsView?.Refresh(_targetConfig);
             _controlsView?.Refresh(_targetConfig);
             _liveTesterView?.RefreshPlayModeState(_targetConfig);
+            _buildablesView?.Refresh();
             RefreshFooter();
         }
 
@@ -391,8 +458,25 @@ namespace TMBS.Editor.InputConfigurator
             _footerBoundLabel.RemoveFromClassList("tmbs-pill--muted");
 
             _footerConflictLabel.RemoveFromClassList("tmbs-pill--ok");
+            _footerConflictLabel.RemoveFromClassList("tmbs-pill--warn");
             _footerConflictLabel.RemoveFromClassList("tmbs-pill--bad");
             _footerConflictLabel.RemoveFromClassList("tmbs-pill--muted");
+
+            if (_activeTab == TabSection.Buildables && _buildablesView != null)
+            {
+                _footerBoundLabel.text = $"{_buildablesView.TotalCount} buildables ({_buildablesView.FilteredCount} shown)";
+                _footerBoundLabel.AddToClassList(_buildablesView.TotalCount > 0 ? "tmbs-pill--ok" : "tmbs-pill--muted");
+
+                int missing = _buildablesView.MissingTileCount;
+                _footerConflictLabel.text = missing == 0
+                    ? "✔ All buildables have tiles"
+                    : $"⚠ {missing} missing tile(s)";
+                _footerConflictLabel.AddToClassList(missing == 0 ? "tmbs-pill--ok" : "tmbs-pill--warn");
+
+                _footerModeLabel.text = "Page: Buildables Studio";
+                _revertBtn.SetEnabled(false);
+                return;
+            }
 
             if (_targetConfig == null || _targetConfig.input == null)
             {

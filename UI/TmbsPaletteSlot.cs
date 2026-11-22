@@ -1,13 +1,13 @@
 using System;
-using UnityEngine;
-using UnityEngine.UI;
 using TMBS.Runtime.Config;
+using UnityEngine;
 using UnityEngine.Tilemaps;
+using UnityEngine.UI;
 
 namespace TMBS.UI
 {
     /// <summary>
-    /// Palette slot representing a selectable buildable or tile.
+    /// Palette slot representing a selectable buildable or direct tile in a 3-zone card layout.
     /// </summary>
     [DisallowMultipleComponent]
     public class TmbsPaletteSlot : MonoBehaviour
@@ -19,206 +19,335 @@ namespace TMBS.UI
         [SerializeField] private Button slotButton;
         [SerializeField] private Text costBadgeText;
         [SerializeField] private Image categoryColorBar;
+        [SerializeField] private GameObject costBadgeContainer;
+        [SerializeField] private GameObject hotkeyBadge;
+        [SerializeField] private Text hotkeyText;
+        [SerializeField] private LayoutElement slotLayoutElement;
 
-        [Header("State")]
+        [Header("State (Legacy Serialization Preserved)")]
         [SerializeField] private Color selectedColor = new Color(0.96f, 0.65f, 0.14f, 1f);
         [SerializeField] private Color normalBorderColor = new Color(0.25f, 0.25f, 0.3f, 0.6f);
-
-        private static readonly Color NormalBackgroundColor = new Color(0.14f, 0.16f, 0.19f, 0.94f);
-        private static readonly Color SelectedBackgroundColor = new Color(0.22f, 0.25f, 0.30f, 0.98f);
-        private static readonly Color NormalOutlineColor = new Color(1f, 1f, 1f, 0.12f);
-        private static readonly Color SelectedAccentColor = new Color(0.96f, 0.65f, 0.14f, 1f);
-        private static readonly Color SelectedLabelColor = new Color(1f, 0.96f, 0.84f, 1f);
-        private static readonly Color NormalLabelColor = new Color(0.92f, 0.94f, 0.96f, 1f);
 
         public TmbsBuildableData BuildableData { get; private set; }
         public TileBase DirectTile { get; private set; }
         public bool IsSelected { get; private set; }
         public string ItemName { get; private set; }
         public string Category { get; private set; }
+        public bool IsDirectTileSlot => BuildableData == null && DirectTile != null;
 
         private Action<TmbsPaletteSlot> _onSelectedCallback;
         private Outline _slotOutline;
-        private GameObject _hotkeyBadge;
-        private Text _hotkeyText;
+        private TmbsUIThemeSettings _theme;
+        private bool _clickListenerBound;
 
         private void Awake()
         {
+            EnsureSlotStructure();
+            BindClickHandler();
+        }
+
+        private void BindClickHandler()
+        {
+            if (_clickListenerBound)
+                return;
+
             if (slotButton == null)
                 slotButton = GetComponent<Button>();
 
             if (slotButton != null)
+            {
                 slotButton.onClick.AddListener(OnClick);
-
-            ConfigureSlotLayout();
+                _clickListenerBound = true;
+            }
         }
 
-        private void ConfigureSlotLayout()
+        private TmbsUIThemeSettings EnsureTheme()
         {
-            var fitter = GetComponent<AspectRatioFitter>();
-            if (fitter == null)
-                fitter = gameObject.AddComponent<AspectRatioFitter>();
-            fitter.aspectMode = AspectRatioFitter.AspectMode.HeightControlsWidth;
-            fitter.aspectRatio = 1f;
+            return _theme ?? (_theme = new TmbsUIThemeSettings());
+        }
+
+        private void EnsureSlotStructure()
+        {
+            RemoveLegacyAspectRatioFitter();
+
+            if (slotButton == null)
+                slotButton = GetComponent<Button>();
+
+            NormalizeButtonColors();
+            EnsureLayoutElement();
+
+            bool isLegacyPrefab = categoryColorBar == null;
+            EnsureCategoryColorBar(isLegacyPrefab);
+            EnsureCostBadgeContainer();
+            EnsureVisualAccessories();
+            EnsureHotkeyBadge();
+
+            if (highlightBorder != null)
+                highlightBorder.enabled = IsSelected;
+        }
+
+        private void RemoveLegacyAspectRatioFitter()
+        {
+            var arf = GetComponent<AspectRatioFitter>();
+            if (arf == null)
+                return;
+
+            // Disable first so same-frame layout passes immediately respect LayoutElement.
+            arf.enabled = false;
+            if (Application.isPlaying)
+                Destroy(arf);
+            else
+                DestroyImmediate(arf);
+        }
+
+        private void NormalizeButtonColors()
+        {
+            if (slotButton == null)
+                return;
+
+            var colors = slotButton.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(1.08f, 1.08f, 1.08f, 1f);
+            colors.pressedColor = new Color(0.90f, 0.90f, 0.90f, 1f);
+            colors.selectedColor = Color.white;
+            slotButton.colors = colors;
+        }
+
+        private void EnsureLayoutElement()
+        {
+            if (slotLayoutElement != null)
+                return;
+
+            slotLayoutElement = GetComponent<LayoutElement>();
+            if (slotLayoutElement == null)
+            {
+                slotLayoutElement = gameObject.AddComponent<LayoutElement>();
+                slotLayoutElement.minWidth = 76f;
+                slotLayoutElement.minHeight = 80f;
+                slotLayoutElement.preferredWidth = 84f;
+                slotLayoutElement.preferredHeight = 88f;
+                slotLayoutElement.flexibleWidth = 0f;
+                slotLayoutElement.flexibleHeight = 0f;
+            }
+        }
+
+        private void EnsureCategoryColorBar(bool isLegacyPrefab)
+        {
+            if (categoryColorBar == null)
+            {
+                Transform existing = transform.Find("CategoryColorBar");
+                if (existing != null)
+                {
+                    var existingImg = existing.GetComponent<Image>();
+                    if (existingImg != null && existingImg != highlightBorder)
+                        categoryColorBar = existingImg;
+                }
+            }
+
+            if (categoryColorBar == null)
+            {
+                var barObj = new GameObject("CategoryColorBar", typeof(RectTransform), typeof(Image));
+                barObj.transform.SetParent(transform, false);
+
+                var barRt = barObj.GetComponent<RectTransform>();
+                SetStretchRect(barRt, new Vector2(0f, 0f), new Vector2(1f, 0.045f));
+
+                categoryColorBar = barObj.GetComponent<Image>();
+                categoryColorBar.raycastTarget = false;
+                categoryColorBar.color = EnsureTheme().ResolveCategoryColor(Category);
+            }
+
+            if (!isLegacyPrefab)
+                return;
+
+            // Upgrade legacy prefab anchors without overwriting Inspector edits on updated prefabs.
+            if (highlightBorder != null && highlightBorder != categoryColorBar && highlightBorder.rectTransform.anchorMax.y <= 0.1f)
+            {
+                SetStretchRect(highlightBorder.rectTransform, new Vector2(0f, 0.955f), new Vector2(1f, 1f));
+                highlightBorder.fillCenter = true;
+            }
 
             if (iconImage != null)
             {
                 iconImage.preserveAspect = true;
                 var iconRt = iconImage.rectTransform;
-                iconRt.anchorMin = new Vector2(0.15f, 0.28f);
-                iconRt.anchorMax = new Vector2(0.85f, 0.90f);
-                iconRt.offsetMin = Vector2.zero;
-                iconRt.offsetMax = Vector2.zero;
+                if (iconRt.anchorMax.y > 0.85f || iconRt.anchorMin.y < 0.27f)
+                {
+                    SetStretchRect(iconRt, new Vector2(0.15f, 0.28f), new Vector2(0.85f, 0.76f));
+                }
             }
 
-            if (highlightBorder != null)
+            if (labelText != null && labelText.rectTransform.anchorMin.y < 0.045f)
             {
-                var borderRt = highlightBorder.rectTransform;
-                borderRt.anchorMin = new Vector2(0f, 0f);
-                borderRt.anchorMax = new Vector2(1f, 0.05f);
-                borderRt.offsetMin = Vector2.zero;
-                borderRt.offsetMax = Vector2.zero;
-                highlightBorder.fillCenter = true;
+                SetStretchRect(labelText.rectTransform, new Vector2(0.06f, 0.06f), new Vector2(0.94f, 0.26f));
             }
+        }
 
-            if (labelText != null)
+        private void EnsureCostBadgeContainer()
+        {
+            if (costBadgeContainer != null || costBadgeText == null)
+                return;
+
+            if (costBadgeText.transform.parent != null && costBadgeText.transform.parent != transform)
             {
-                labelText.fontSize = 13;
-                labelText.resizeTextForBestFit = true;
-                labelText.resizeTextMinSize = 9;
-                labelText.resizeTextMaxSize = 14;
-                labelText.horizontalOverflow = HorizontalWrapMode.Wrap;
-                labelText.verticalOverflow = VerticalWrapMode.Truncate;
+                costBadgeContainer = costBadgeText.transform.parent.gameObject;
+                return;
             }
 
-            if (costBadgeText != null)
+            var theme = EnsureTheme();
+            Transform existing = transform.Find("CostBadge_Pill");
+            if (existing != null)
             {
-                costBadgeText.fontSize = 12;
-                costBadgeText.resizeTextForBestFit = true;
-                costBadgeText.resizeTextMinSize = 9;
-                costBadgeText.resizeTextMaxSize = 13;
+                costBadgeContainer = existing.gameObject;
+            }
+            else
+            {
+                costBadgeContainer = new GameObject("CostBadge_Pill", typeof(RectTransform), typeof(Image));
+                costBadgeContainer.transform.SetParent(transform, false);
+                SetStretchRect(costBadgeContainer.GetComponent<RectTransform>(), new Vector2(0.34f, 0.78f), new Vector2(0.94f, 0.95f));
+
+                var pillImage = costBadgeContainer.GetComponent<Image>();
+                pillImage.color = theme.badgePillColor;
+                pillImage.raycastTarget = false;
             }
 
-            EnsureVisualAccessories();
-            EnsureHotkeyBadge();
+            costBadgeText.transform.SetParent(costBadgeContainer.transform, false);
+            var textRt = costBadgeText.rectTransform;
+            textRt.anchorMin = Vector2.zero;
+            textRt.anchorMax = Vector2.one;
+            textRt.pivot = new Vector2(0.5f, 0.5f);
+            textRt.offsetMin = new Vector2(3f, 0f);
+            textRt.offsetMax = new Vector2(-3f, 0f);
+
+            costBadgeText.fontSize = 10;
+            costBadgeText.resizeTextForBestFit = true;
+            costBadgeText.resizeTextMinSize = 8;
+            costBadgeText.resizeTextMaxSize = 11;
+            costBadgeText.fontStyle = FontStyle.Bold;
+            costBadgeText.alignment = TextAnchor.MiddleCenter;
+            costBadgeText.color = theme.badgeTextColor;
+            costBadgeText.raycastTarget = false;
+            costBadgeText.supportRichText = false;
         }
 
         private void EnsureVisualAccessories()
         {
+            var theme = EnsureTheme();
             _slotOutline = GetComponent<Outline>();
             if (_slotOutline == null)
+            {
                 _slotOutline = gameObject.AddComponent<Outline>();
-            _slotOutline.effectDistance = new Vector2(1.5f, -1.5f);
-            _slotOutline.effectColor = IsSelected ? SelectedAccentColor : NormalOutlineColor;
+                _slotOutline.effectDistance = new Vector2(1.5f, -1.5f);
+            }
+            _slotOutline.effectColor = IsSelected ? theme.selectionBorderColor : theme.panelBorderColor;
 
-            EnsureShadow(gameObject, new Vector2(0f, -2f), new Color(0f, 0f, 0f, 0.45f));
+            EnsureShadowIfMissing(gameObject, new Vector2(0f, -2f), new Color(0f, 0f, 0f, 0.45f));
 
             if (labelText != null)
-                EnsureShadow(labelText.gameObject, new Vector2(1f, -1f), new Color(0f, 0f, 0f, 0.8f));
-
-            if (costBadgeText != null)
-                EnsureShadow(costBadgeText.gameObject, new Vector2(1f, -1f), new Color(0f, 0f, 0f, 0.8f));
+                EnsureShadowIfMissing(labelText.gameObject, new Vector2(1f, -1f), new Color(0f, 0f, 0f, 0.8f));
         }
 
-        private static void EnsureShadow(GameObject target, Vector2 effectDistance, Color effectColor)
+        private static void EnsureShadowIfMissing(GameObject target, Vector2 effectDistance, Color effectColor)
         {
             if (target == null)
                 return;
 
-            Shadow shadow = null;
             var shadows = target.GetComponents<Shadow>();
             for (int i = 0; i < shadows.Length; i++)
             {
                 if (shadows[i] != null && shadows[i].GetType() == typeof(Shadow))
-                {
-                    shadow = shadows[i];
-                    break;
-                }
+                    return;
             }
 
-            if (shadow == null)
-                shadow = target.AddComponent<Shadow>();
-
+            var shadow = target.AddComponent<Shadow>();
             shadow.effectDistance = effectDistance;
             shadow.effectColor = effectColor;
         }
 
         private void EnsureHotkeyBadge()
         {
-            if (_hotkeyBadge != null && _hotkeyText != null)
+            if (hotkeyBadge != null && hotkeyText != null)
                 return;
 
             Transform existing = transform.Find("HotkeyBadge");
             if (existing != null)
             {
-                _hotkeyBadge = existing.gameObject;
-                _hotkeyText = existing.GetComponentInChildren<Text>(true);
-                if (_hotkeyText != null)
+                hotkeyBadge = existing.gameObject;
+                if (hotkeyText == null)
+                    hotkeyText = existing.GetComponentInChildren<Text>(true);
+                if (hotkeyText != null)
                     return;
             }
 
-            if (_hotkeyBadge == null)
+            var theme = EnsureTheme();
+            if (hotkeyBadge == null)
             {
-                _hotkeyBadge = new GameObject("HotkeyBadge", typeof(RectTransform), typeof(Image));
-                _hotkeyBadge.transform.SetParent(transform, false);
+                hotkeyBadge = new GameObject("HotkeyBadge", typeof(RectTransform), typeof(Image));
+                hotkeyBadge.transform.SetParent(transform, false);
+                SetStretchRect(hotkeyBadge.GetComponent<RectTransform>(), new Vector2(0.06f, 0.78f), new Vector2(0.28f, 0.95f));
 
-                var badgeRt = _hotkeyBadge.GetComponent<RectTransform>();
-                badgeRt.anchorMin = new Vector2(0.05f, 0.75f);
-                badgeRt.anchorMax = new Vector2(0.28f, 0.95f);
-                badgeRt.offsetMin = Vector2.zero;
-                badgeRt.offsetMax = Vector2.zero;
-
-                var badgeImage = _hotkeyBadge.GetComponent<Image>();
-                badgeImage.color = new Color(0.07f, 0.08f, 0.10f, 0.82f);
+                var badgeImage = hotkeyBadge.GetComponent<Image>();
+                badgeImage.color = theme.badgePillColor;
                 badgeImage.raycastTarget = false;
-
-                _hotkeyBadge.SetActive(false);
+                hotkeyBadge.SetActive(false);
             }
 
-            var textObj = new GameObject("HotkeyText", typeof(RectTransform), typeof(Text));
-            textObj.transform.SetParent(_hotkeyBadge.transform, false);
+            if (hotkeyText == null)
+            {
+                var textObj = new GameObject("HotkeyText", typeof(RectTransform), typeof(Text));
+                textObj.transform.SetParent(hotkeyBadge.transform, false);
+                SetStretchRect(textObj.GetComponent<RectTransform>(), Vector2.zero, Vector2.one);
 
-            var textRt = textObj.GetComponent<RectTransform>();
-            textRt.anchorMin = Vector2.zero;
-            textRt.anchorMax = Vector2.one;
-            textRt.offsetMin = Vector2.zero;
-            textRt.offsetMax = Vector2.zero;
-
-            _hotkeyText = textObj.GetComponent<Text>();
-            Font font = labelText != null ? labelText.font : null;
-            if (font == null)
-                font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            _hotkeyText.font = font;
-            _hotkeyText.fontSize = 11;
-            _hotkeyText.resizeTextForBestFit = true;
-            _hotkeyText.resizeTextMinSize = 9;
-            _hotkeyText.resizeTextMaxSize = 12;
-            _hotkeyText.fontStyle = FontStyle.Bold;
-            _hotkeyText.alignment = TextAnchor.MiddleCenter;
-            _hotkeyText.color = NormalLabelColor;
-            _hotkeyText.raycastTarget = false;
+                hotkeyText = textObj.GetComponent<Text>();
+                Font font = labelText != null ? labelText.font : null;
+                if (font == null)
+                    font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                hotkeyText.font = font;
+                hotkeyText.fontSize = 10;
+                hotkeyText.resizeTextForBestFit = true;
+                hotkeyText.resizeTextMinSize = 9;
+                hotkeyText.resizeTextMaxSize = 11;
+                hotkeyText.fontStyle = FontStyle.Bold;
+                hotkeyText.alignment = TextAnchor.MiddleCenter;
+                hotkeyText.color = theme.slotNormalLabelColor;
+                hotkeyText.raycastTarget = false;
+            }
         }
 
         public void SetHotkeyIndex(int index)
         {
             EnsureHotkeyBadge();
 
-            if (_hotkeyBadge == null || _hotkeyText == null)
+            if (hotkeyBadge == null || hotkeyText == null)
                 return;
 
             if (index >= 1 && index <= 9)
             {
-                _hotkeyBadge.SetActive(true);
-                _hotkeyText.text = index.ToString();
+                var theme = EnsureTheme();
+                var badgeImage = hotkeyBadge.GetComponent<Image>();
+                if (badgeImage != null)
+                    badgeImage.color = theme.badgePillColor;
+
+                hotkeyText.color = theme.slotNormalLabelColor;
+                hotkeyBadge.SetActive(true);
+                hotkeyText.text = index.ToString();
             }
             else
             {
-                _hotkeyBadge.SetActive(false);
+                hotkeyBadge.SetActive(false);
             }
         }
 
         public void Setup(TmbsBuildableData data, Action<TmbsPaletteSlot> onSelected)
         {
+            Setup(data, onSelected, null);
+        }
+
+        public void Setup(TmbsBuildableData data, Action<TmbsPaletteSlot> onSelected, TmbsUIThemeSettings theme)
+        {
+            _theme = theme ?? new TmbsUIThemeSettings();
+            EnsureCostBadgeContainer();
+
             BuildableData = data;
             DirectTile = data != null ? data.tile : null;
             _onSelectedCallback = onSelected;
@@ -229,26 +358,11 @@ namespace TMBS.UI
                 Category = !string.IsNullOrEmpty(data.category) ? data.category : "General";
 
                 Sprite icon = ResolveSprite(data, DirectTile);
-
                 SetIcon(icon);
                 SetLabel(ItemName);
 
-                if (costBadgeText != null)
-                {
-                    Vector2Int size = data.GetSize();
-                    string sizeTag = (data.isBlueprint && (size.x > 1 || size.y > 1)) ? $"{size.x}x{size.y}" : "";
-                    if (data.resourceCost > 0)
-                        costBadgeText.text = string.IsNullOrEmpty(sizeTag) ? $"${data.resourceCost}" : $"{sizeTag} ${data.resourceCost}";
-                    else if (data.workCost > 1)
-                        costBadgeText.text = string.IsNullOrEmpty(sizeTag) ? $"W:{data.workCost}" : $"{sizeTag} W:{data.workCost}";
-                    else
-                        costBadgeText.text = sizeTag;
-                }
-
-                if (categoryColorBar != null)
-                {
-                    categoryColorBar.color = GetCategoryColor(Category);
-                }
+                string metaText = _theme.FormatSlotMetaBadge(data);
+                UpdateCostBadge(metaText);
             }
             else
             {
@@ -256,9 +370,10 @@ namespace TMBS.UI
                 Category = "None";
                 SetIcon(null);
                 SetLabel("None");
-                if (costBadgeText != null) costBadgeText.text = "";
+                UpdateCostBadge(string.Empty);
             }
 
+            ApplyCategoryColorBar();
             SetSelected(false);
         }
 
@@ -267,6 +382,23 @@ namespace TMBS.UI
         /// </summary>
         public void Setup(TileBase tile, string displayName, Sprite customIcon, string category, Action<TmbsPaletteSlot> onSelected)
         {
+            Setup(tile, displayName, customIcon, category, onSelected, null);
+        }
+
+        /// <summary>
+        /// Configures this slot from a TileBase asset using the supplied theme settings.
+        /// </summary>
+        public void Setup(
+            TileBase tile,
+            string displayName,
+            Sprite customIcon,
+            string category,
+            Action<TmbsPaletteSlot> onSelected,
+            TmbsUIThemeSettings theme)
+        {
+            _theme = theme ?? new TmbsUIThemeSettings();
+            EnsureCostBadgeContainer();
+
             BuildableData = null;
             DirectTile = tile;
             _onSelectedCallback = onSelected;
@@ -274,16 +406,10 @@ namespace TMBS.UI
             Category = !string.IsNullOrEmpty(category) ? category : "Tiles";
 
             Sprite icon = customIcon != null ? customIcon : ResolveSprite(null, tile);
-
             SetIcon(icon);
             SetLabel(ItemName);
-
-            if (costBadgeText != null)
-                costBadgeText.text = "";
-
-            if (categoryColorBar != null)
-                categoryColorBar.color = GetCategoryColor(Category);
-
+            UpdateCostBadge(string.Empty);
+            ApplyCategoryColorBar();
             SetSelected(false);
         }
 
@@ -319,34 +445,17 @@ namespace TMBS.UI
             return null;
         }
 
-        private static Color GetCategoryColor(string category)
-        {
-            if (string.IsNullOrEmpty(category)) return new Color(0.4f, 0.6f, 0.8f, 1f);
-            switch (category.ToLowerInvariant())
-            {
-                case "blocks": return new Color(0.2f, 0.7f, 1f, 1f);
-                case "hull": return new Color(0.35f, 0.65f, 0.9f, 1f);
-                case "armor": return new Color(0.55f, 0.7f, 0.85f, 1f);
-                case "structure": return new Color(1f, 0.65f, 0.2f, 1f);
-                case "tiles": return new Color(0.4f, 0.9f, 0.5f, 1f);
-                case "weapons": return new Color(1f, 0.3f, 0.3f, 1f);
-                case "utility": return new Color(0.95f, 0.8f, 0.25f, 1f);
-                case "engines": return new Color(1f, 0.45f, 0.2f, 1f);
-                case "cockpits": return new Color(0.3f, 0.85f, 0.85f, 1f);
-                case "connectors": return new Color(0.7f, 0.55f, 0.95f, 1f);
-                case "decorative": return new Color(0.85f, 0.55f, 0.8f, 1f);
-                default: return new Color(0.6f, 0.7f, 0.8f, 1f);
-            }
-        }
-
         public void SetSelected(bool selected)
         {
+            var theme = EnsureTheme();
             IsSelected = selected;
+
+            ApplyCategoryColorBar();
 
             if (highlightBorder != null)
             {
-                highlightBorder.enabled = true;
-                highlightBorder.color = selected ? SelectedAccentColor : GetCategoryColor(Category);
+                highlightBorder.enabled = selected;
+                highlightBorder.color = theme.selectionBorderColor;
             }
 
             Graphic background = slotButton != null && slotButton.targetGraphic != null
@@ -354,21 +463,56 @@ namespace TMBS.UI
                 : GetComponent<Image>();
             if (background != null)
             {
-                background.color = selected ? SelectedBackgroundColor : NormalBackgroundColor;
+                background.color = selected ? theme.slotSelectedColor : theme.slotNormalColor;
             }
 
+            if (_slotOutline == null)
+                _slotOutline = GetComponent<Outline>();
             if (_slotOutline != null)
             {
-                _slotOutline.effectColor = selected ? SelectedAccentColor : NormalOutlineColor;
+                _slotOutline.effectColor = selected ? theme.selectionBorderColor : theme.panelBorderColor;
             }
 
             if (labelText != null)
             {
                 labelText.fontStyle = selected ? FontStyle.Bold : FontStyle.Normal;
-                labelText.color = selected ? SelectedLabelColor : NormalLabelColor;
+                labelText.color = selected ? theme.slotSelectedLabelColor : theme.slotNormalLabelColor;
             }
 
             transform.localScale = Vector3.one;
+        }
+
+        private void ApplyCategoryColorBar()
+        {
+            if (categoryColorBar != null)
+            {
+                categoryColorBar.color = EnsureTheme().ResolveCategoryColor(Category);
+            }
+        }
+
+        private void UpdateCostBadge(string metaText)
+        {
+            var theme = EnsureTheme();
+            bool hasMeta = !string.IsNullOrEmpty(metaText);
+
+            if (costBadgeText != null)
+            {
+                costBadgeText.text = metaText;
+                costBadgeText.color = theme.badgeTextColor;
+            }
+
+            if (costBadgeContainer != null)
+            {
+                var pillImage = costBadgeContainer.GetComponent<Image>();
+                if (pillImage != null)
+                    pillImage.color = theme.badgePillColor;
+
+                costBadgeContainer.SetActive(hasMeta);
+            }
+            else if (costBadgeText != null)
+            {
+                costBadgeText.gameObject.SetActive(hasMeta);
+            }
         }
 
         private void SetIcon(Sprite sprite)
@@ -393,16 +537,42 @@ namespace TMBS.UI
             _onSelectedCallback?.Invoke(this);
         }
 
+        private static void SetStretchRect(RectTransform rt, Vector2 anchorMin, Vector2 anchorMax)
+        {
+            if (rt == null)
+                return;
+
+            rt.anchorMin = anchorMin;
+            rt.anchorMax = anchorMax;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+        }
+
         /// <summary>
         /// Assigns UI element references for dynamically instantiated slots.
         /// </summary>
-        public void SetInternalReferences(Image icon, Text label, Image border, Button btn, Text costBadge = null)
+        public void SetInternalReferences(
+            Image icon,
+            Text label,
+            Image border,
+            Button btn,
+            Text costBadge = null,
+            Image categoryBar = null,
+            GameObject costContainer = null,
+            GameObject hotkeyBadgeObj = null,
+            Text hotkeyTxt = null,
+            LayoutElement layoutElem = null)
         {
             iconImage = icon;
             labelText = label;
             highlightBorder = border;
             slotButton = btn;
             costBadgeText = costBadge;
+            categoryColorBar = categoryBar;
+            costBadgeContainer = costContainer;
+            hotkeyBadge = hotkeyBadgeObj;
+            hotkeyText = hotkeyTxt;
+            slotLayoutElement = layoutElem;
         }
     }
 }

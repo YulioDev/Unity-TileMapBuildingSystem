@@ -15,12 +15,92 @@ MonoBehaviour:
   executionMode: 1
   input:
     mode: 1
+    legacy:
+      place:
+        primary:
+          source: 2
+          key: 0
+          mouseButton: 0
+          modifiers: 0
+        secondary:
+          source: 0
+          key: 0
+          mouseButton: 0
+          modifiers: 0
+      cancel:
+        primary:
+          source: 2
+          key: 0
+          mouseButton: 1
+          modifiers: 0
+        secondary:
+          source: 0
+          key: 0
+          mouseButton: 0
+          modifiers: 0
+      eraseModifier:
+        primary:
+          source: 1
+          key: 304
+          mouseButton: -1
+          modifiers: 0
+        secondary:
+          source: 1
+          key: 303
+          mouseButton: -1
+          modifiers: 0
+      undo:
+        primary:
+          source: 1
+          key: 122
+          mouseButton: -1
+          modifiers: 1
+        secondary:
+          source: 0
+          key: 0
+          mouseButton: 0
+          modifiers: 0
+      redo:
+        primary:
+          source: 1
+          key: 121
+          mouseButton: -1
+          modifiers: 1
+        secondary:
+          source: 1
+          key: 122
+          mouseButton: -1
+          modifiers: 3
+      rotate:
+        primary:
+          source: 1
+          key: 114
+          mouseButton: -1
+          modifiers: 0
+        secondary:
+          source: 0
+          key: 0
+          mouseButton: 0
+          modifiers: 0
+      mirror:
+        primary:
+          source: 1
+          key: 102
+          mouseButton: -1
+          modifiers: 0
+        secondary:
+          source: 0
+          key: 0
+          mouseButton: 0
+          modifiers: 0
     pointAction: {fileID: 0}
     dragAction: {fileID: 0}
     cancelAction: {fileID: 0}
     undoAction: {fileID: 0}
     redoAction: {fileID: 0}
     alternateModifierAction: {fileID: 0}
+    rotateAction: {fileID: 0}
+    mirrorAction: {fileID: 0}
     strictInputValidation: 1
     requirePoint: 1
     requireConfirm: 1

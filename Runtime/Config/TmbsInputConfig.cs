@@ -16,7 +16,7 @@ namespace TMBS.Runtime.Config
             "ExternalProvided: Uses a custom IBuildInputAdapter supplied via SetExternalInputAdapter or SetExternalInputProvider.")]
         public TmbsInputMode mode = TmbsInputMode.Legacy;
 
-        [Tooltip("Key and mouse bindings used when mode == Legacy. Configure visually via Window > TMBS > Input Configurator.")]
+        [Tooltip("Key and mouse bindings used when mode == Legacy. Configure visually via Window > TMBS > TMBS Settings.")]
         public TmbsLegacyBindings legacy = TmbsLegacyBindings.CreateDefault();
 
 #if ENABLE_INPUT_SYSTEM
