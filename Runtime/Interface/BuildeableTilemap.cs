@@ -238,6 +238,11 @@ namespace TMBS.Runtime.Interface
 
         public TMBS.Core.Pending.IPendingWorkApi PendingWorkApi => _pendingWorkApi;
         public TMBS.Core.Pending.IPendingStore PendingStore => (_pendingWorkApi as TMBS.Core.Pending.PendingWorkApi)?.Store;
+        public Tilemap TargetTilemap => targetTilemap;
+        public IBuildInputAdapter ActiveInputAdapter => _input;
+
+        /// <summary>Raised whenever the active input adapter emits a BuildIntent (before focus filtering). Used by editor/debug tools.</summary>
+        public event Action<BuildIntent> IntentObserved;
         private PreviewToggle _previewEvaluator;
         private IBuildMode _activeMode;
 
@@ -440,7 +445,13 @@ namespace TMBS.Runtime.Interface
 
         private IBuildInputAdapter CreateLegacyMouseInputAdapter()
         {
-            return new TMBS.Unity.Input.LegacyMouseAdapter(ResolveCamera, CreateConstructionPlaneProvider());
+            var legacyBindings = rootConfig != null && rootConfig.input != null
+                ? rootConfig.input.GetLegacyBindings()
+                : null;
+            return new TMBS.Unity.Input.LegacyMouseAdapter(
+                ResolveCamera,
+                CreateConstructionPlaneProvider(),
+                legacyBindings);
         }
 
 #if ENABLE_INPUT_SYSTEM
@@ -748,6 +759,8 @@ namespace TMBS.Runtime.Interface
 
         private void OnBuildIntent(BuildIntent intent)
         {
+            IntentObserved?.Invoke(intent);
+
             if (intent.Type == BuildIntentType.Rotate)
             {
                 Rotate();

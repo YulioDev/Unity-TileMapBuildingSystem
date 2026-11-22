@@ -179,6 +179,13 @@ namespace TMBS.Editor
 
             EditorGUILayout.LabelField("Input", EditorStyles.boldLabel);
 
+            if (GUILayout.Button("Open Input Configurator Window", GUILayout.Height(24)))
+            {
+                TMBS.Editor.InputConfigurator.TmbsInputConfiguratorWindow.Open((TmbsRootConfig)target);
+            }
+
+            EditorGUILayout.Space(2);
+
             var modeProp = inputProp.FindPropertyRelative("mode");
             if (modeProp != null)
                 EditorGUILayout.PropertyField(modeProp);
@@ -227,8 +234,28 @@ namespace TMBS.Editor
         {
             EditorGUI.indentLevel++;
             EditorGUILayout.HelpBox(
-                "Legacy: Uses Unity's built-in Input Manager (Mouse & Keyboard).",
+                "Legacy: Bindings are edited visually in Window ▸ TMBS ▸ Input Configurator.",
                 MessageType.Info);
+
+            var rootConfig = target as TmbsRootConfig;
+            var legacy = rootConfig != null && rootConfig.input != null
+                ? rootConfig.input.GetLegacyBindings()
+                : null;
+
+            if (legacy != null)
+            {
+                using (new EditorGUI.DisabledScope(true))
+                {
+                    EditorGUILayout.TextField("Place / Drag", legacy.place.ToSummaryString());
+                    EditorGUILayout.TextField("Cancel", legacy.cancel.ToSummaryString());
+                    EditorGUILayout.TextField("Erase (Hold)", legacy.eraseModifier.ToSummaryString());
+                    EditorGUILayout.TextField("Undo", legacy.undo.ToSummaryString());
+                    EditorGUILayout.TextField("Redo", legacy.redo.ToSummaryString());
+                    EditorGUILayout.TextField("Rotate", legacy.rotate.ToSummaryString());
+                    EditorGUILayout.TextField("Mirror", legacy.mirror.ToSummaryString());
+                }
+            }
+
             EditorGUI.indentLevel--;
         }
 

@@ -11,9 +11,13 @@ namespace TMBS.Runtime.Config
     {
         [Tooltip(
             "None: Input will not be processed.\n" +
-            "Legacy: Uses built-in input adapters (Unity's old Input Manager).\n" +
-            "InputActions: Uses Unity's Input System package with configurable InputActionReferences.")]
+            "Legacy: Uses built-in Legacy Input Manager adapter with configurable key/mouse bindings.\n" +
+            "InputActions: Uses Unity's Input System package with configurable InputActionReferences.\n" +
+            "ExternalProvided: Uses a custom IBuildInputAdapter supplied via SetExternalInputAdapter or SetExternalInputProvider.")]
         public TmbsInputMode mode = TmbsInputMode.Legacy;
+
+        [Tooltip("Key and mouse bindings used when mode == Legacy. Configure visually via Window > TMBS > Input Configurator.")]
+        public TmbsLegacyBindings legacy = TmbsLegacyBindings.CreateDefault();
 
 #if ENABLE_INPUT_SYSTEM
         [Tooltip("Action that provides the pointer screen position (Value, Vector2).")]
@@ -52,5 +56,10 @@ namespace TMBS.Runtime.Config
 
         public bool allowUndoInput = true;
         public bool allowRedoInput = true;
+
+        public TmbsLegacyBindings GetLegacyBindings()
+        {
+            return legacy ?? (legacy = TmbsLegacyBindings.CreateDefault());
+        }
     }
 }
