@@ -97,6 +97,7 @@ namespace TMBS.Runtime.Interface
             currentBuildable = descriptor;
             _tileSelectionState?.ResetTransform();
             PublishSelectionChanged();
+            RefreshPreview();
         }
 
         /// <summary>Sets a single tile as the active buildable, or clears selection if null.</summary>
@@ -170,20 +171,20 @@ namespace TMBS.Runtime.Interface
         public TMBS.Core.Selection.PlacementTransform CurrentTransform =>
             _tileSelectionState?.Transform ?? default;
 
-        /// <summary>Rotates the current selection by 90 degrees clockwise.</summary>
+        /// <summary>Rotates the current selection by 90 degrees clockwise if allowed by the selected buildable.</summary>
         public void Rotate()
         {
-            if (_tileSelectionState == null) return;
+            if (_tileSelectionState == null || !_tileSelectionState.CanRotate) return;
             _tileSelectionState.Rotate();
             _preview?.UpdateTransform(_tileSelectionState.Transform.ToMatrix());
             PublishSelectionChanged();
             RefreshPreview();
         }
 
-        /// <summary>Toggles horizontal mirroring for the current selection.</summary>
+        /// <summary>Toggles horizontal mirroring for the current selection if allowed by the selected buildable.</summary>
         public void Mirror()
         {
-            if (_tileSelectionState == null) return;
+            if (_tileSelectionState == null || !_tileSelectionState.CanMirror) return;
             _tileSelectionState.Mirror();
             _preview?.UpdateTransform(_tileSelectionState.Transform.ToMatrix());
             PublishSelectionChanged();
@@ -196,7 +197,7 @@ namespace TMBS.Runtime.Interface
             var cell = _lastPreviewCell;
             var alternate = _lastPreviewAlternate;
             _hasLastPreviewIntent = false;
-            var intent = new BuildIntent(BuildIntentType.PointMove, targetTilemap.CellToWorld(cell), alternate);
+            var intent = new BuildIntent(BuildIntentType.PointMove, targetTilemap.GetCellCenterWorld(cell), alternate);
             OnBuildIntent(intent);
         }
 
@@ -236,10 +237,22 @@ namespace TMBS.Runtime.Interface
         private TMBS.Core.Execution.IBuildExecutor _executor;
         private TMBS.Core.Pending.IPendingWorkApi _pendingWorkApi;
 
+        public TMBS.Core.Metadata.IMetadataStore Metadata => _metadata;
+        public TMBS.Core.History.IUndoRedoHistory History => _history;
+        public TMBS.Core.Pending.PendingDebugBuilder PendingDebugBuilder => _pendingDebugBuilder;
         public TMBS.Core.Pending.IPendingWorkApi PendingWorkApi => _pendingWorkApi;
         public TMBS.Core.Pending.IPendingStore PendingStore => (_pendingWorkApi as TMBS.Core.Pending.PendingWorkApi)?.Store;
         public Tilemap TargetTilemap => targetTilemap;
         public IBuildInputAdapter ActiveInputAdapter => _input;
+
+        public bool TryGetBuildRecord(Vector3Int cell, out TMBS.Core.Metadata.BuildRecord record)
+        {
+            if (_metadata != null)
+                return _metadata.TryGet(cell, out record);
+
+            record = default;
+            return false;
+        }
 
         /// <summary>Raised whenever the active input adapter emits a BuildIntent (before focus filtering). Used by editor/debug tools.</summary>
         public event Action<BuildIntent> IntentObserved;
@@ -289,7 +302,8 @@ namespace TMBS.Runtime.Interface
                 tickable.Tick(Time.deltaTime);
             }
 
-            _pendingDebugBuilder?.Step();
+            if (Time.timeScale > 0f)
+                _pendingDebugBuilder?.Step();
         }
 
         private Camera ResolveCamera()
@@ -659,12 +673,16 @@ namespace TMBS.Runtime.Interface
             var all = _pendingWorkApi.GetAll();
             if (all == null) return;
 
+            var policy = rootConfig != null && rootConfig.pending != null
+                ? rootConfig.pending.resourcePolicy
+                : ResourceRequirement.None;
+
             foreach (var pending in all)
             {
                 if (pending.Id != evt.PendingId) continue;
                 foreach (var cell in pending.Cells)
                 {
-                    _pendingDebugRenderer.RenderCell(cell, pending.State);
+                    _pendingDebugRenderer.RenderCell(cell, cell.GetCellVisualState(policy));
                 }
                 break;
             }
@@ -678,6 +696,10 @@ namespace TMBS.Runtime.Interface
             var all = _pendingWorkApi.GetAll();
             if (all == null) return;
 
+            var policy = rootConfig != null && rootConfig.pending != null
+                ? rootConfig.pending.resourcePolicy
+                : ResourceRequirement.None;
+
             foreach (var pending in all)
             {
                 if (pending.Id != evt.PendingId) continue;
@@ -686,7 +708,7 @@ namespace TMBS.Runtime.Interface
                     if (cell.IsCompleted)
                         _pendingDebugRenderer.ClearCell(cell.Cell);
                     else
-                        _pendingDebugRenderer.RenderCell(cell, pending.State);
+                        _pendingDebugRenderer.RenderCell(cell, cell.GetCellVisualState(policy));
                 }
                 break;
             }
@@ -699,7 +721,8 @@ namespace TMBS.Runtime.Interface
 
             foreach (var pos in evt.Bounds.allPositionsWithin)
             {
-                _pendingDebugRenderer.ClearCell(pos);
+                if (_pendingWorkApi == null || !_pendingWorkApi.TryGetCellStatus(pos, out _))
+                    _pendingDebugRenderer.ClearCell(pos);
             }
         }
 
@@ -778,7 +801,8 @@ namespace TMBS.Runtime.Interface
                 _pipeline?.CancelActiveOperation();
                 _preview?.Hide();
 
-                if (rootConfig.history != null && rootConfig.history.enableUndoRedo)
+                bool allowUndoInput = rootConfig?.input == null || rootConfig.input.allowUndoInput;
+                if (allowUndoInput && rootConfig?.history != null && rootConfig.history.enableUndoRedo)
                     _history?.TryUndo();
 
                 return;
@@ -789,7 +813,8 @@ namespace TMBS.Runtime.Interface
                 _pipeline?.CancelActiveOperation();
                 _preview?.Hide();
 
-                if (rootConfig.history != null && rootConfig.history.enableUndoRedo)
+                bool allowRedoInput = rootConfig?.input == null || rootConfig.input.allowRedoInput;
+                if (allowRedoInput && rootConfig?.history != null && rootConfig.history.enableUndoRedo)
                     _history?.TryRedo();
 
                 return;

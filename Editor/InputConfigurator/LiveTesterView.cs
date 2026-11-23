@@ -8,6 +8,9 @@ using TMBS.Unity.Input;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 namespace TMBS.Editor.InputConfigurator
 {
@@ -224,9 +227,7 @@ namespace TMBS.Editor.InputConfigurator
             _editModeCard.style.display = playing ? DisplayStyle.None : DisplayStyle.Flex;
             _playModeContainer.style.display = playing ? DisplayStyle.Flex : DisplayStyle.None;
 
-            var bindings = config != null && config.input != null
-                ? config.input.GetLegacyBindings()
-                : TmbsLegacyBindings.CreateDefault();
+            var bindings = ResolvePreviewBindings(config);
             _compactKeyboard.UpdateBindings(bindings);
             _compactMouse.UpdateBindings(bindings);
 
@@ -299,10 +300,22 @@ namespace TMBS.Editor.InputConfigurator
 
             if (_observedTarget.RootConfig != null && _observedTarget.RootConfig.input != null)
             {
-                var bindings = _observedTarget.RootConfig.input.GetLegacyBindings();
+                var bindings = ResolvePreviewBindings(_observedTarget.RootConfig);
                 _compactKeyboard.UpdateBindings(bindings);
                 _compactMouse.UpdateBindings(bindings);
             }
+        }
+
+        private static TmbsLegacyBindings ResolvePreviewBindings(TmbsRootConfig config)
+        {
+            if (config == null || config.input == null)
+                return TmbsLegacyBindings.CreateDefault();
+
+#if ENABLE_INPUT_SYSTEM
+            if (config.input.mode == TmbsInputMode.InputActions)
+                return InputSystemBindingParser.ParseFromConfig(config.input);
+#endif
+            return config.input.GetLegacyBindings();
         }
 
         private void RefreshCapabilities(InputCapabilities caps, bool hasAdapter)
@@ -315,6 +328,8 @@ namespace TMBS.Editor.InputConfigurator
             AddCapabilityPill("Undo", hasAdapter && caps.HasUndo);
             AddCapabilityPill("Redo", hasAdapter && caps.HasRedo);
             AddCapabilityPill("Erase Mod", hasAdapter && caps.HasAlternateModifier);
+            AddCapabilityPill("Rotate", hasAdapter && caps.HasRotate);
+            AddCapabilityPill("Mirror", hasAdapter && caps.HasMirror);
         }
 
         private void AddCapabilityPill(string label, bool supported)
@@ -398,6 +413,13 @@ namespace TMBS.Editor.InputConfigurator
                 _compactKeyboard.UpdatePressedState(k => UnityLegacyInputSource.Instance.GetKey(k));
                 _compactMouse.UpdatePressedState(b => UnityLegacyInputSource.Instance.GetMouseButton(b));
             }
+#if ENABLE_INPUT_SYSTEM
+            else if (Keyboard.current != null || Mouse.current != null)
+            {
+                _compactKeyboard.UpdatePressedState(IsNewInputKeyPressed);
+                _compactMouse.UpdatePressedState(IsNewInputMouseButtonPressed);
+            }
+#endif
             else
             {
                 _compactKeyboard.UpdatePressedState(null);
@@ -446,5 +468,70 @@ namespace TMBS.Editor.InputConfigurator
             _logDirty = true;
             RebuildLogVisuals();
         }
+
+#if ENABLE_INPUT_SYSTEM
+        private static bool IsNewInputKeyPressed(KeyCode code)
+        {
+            var kb = Keyboard.current;
+            if (kb == null)
+                return false;
+
+            if (code >= KeyCode.A && code <= KeyCode.Z)
+            {
+                Key key = (Key)((int)Key.A + (code - KeyCode.A));
+                return kb[key].isPressed;
+            }
+
+            switch (code)
+            {
+                case KeyCode.Alpha1: return kb.digit1Key.isPressed;
+                case KeyCode.Alpha2: return kb.digit2Key.isPressed;
+                case KeyCode.Alpha3: return kb.digit3Key.isPressed;
+                case KeyCode.Alpha4: return kb.digit4Key.isPressed;
+                case KeyCode.Alpha5: return kb.digit5Key.isPressed;
+                case KeyCode.Alpha6: return kb.digit6Key.isPressed;
+                case KeyCode.Alpha7: return kb.digit7Key.isPressed;
+                case KeyCode.Alpha8: return kb.digit8Key.isPressed;
+                case KeyCode.Alpha9: return kb.digit9Key.isPressed;
+                case KeyCode.Alpha0: return kb.digit0Key.isPressed;
+                case KeyCode.LeftShift: return kb.leftShiftKey.isPressed;
+                case KeyCode.RightShift: return kb.rightShiftKey.isPressed;
+                case KeyCode.LeftControl: return kb.leftCtrlKey.isPressed;
+                case KeyCode.RightControl: return kb.rightCtrlKey.isPressed;
+                case KeyCode.LeftAlt: return kb.leftAltKey.isPressed;
+                case KeyCode.RightAlt: return kb.rightAltKey.isPressed;
+                case KeyCode.LeftCommand: return kb.leftCommandKey.isPressed;
+                case KeyCode.RightCommand: return kb.rightCommandKey.isPressed;
+                case KeyCode.Space: return kb.spaceKey.isPressed;
+                case KeyCode.Escape: return kb.escapeKey.isPressed;
+                case KeyCode.Return: return kb.enterKey.isPressed;
+                case KeyCode.Tab: return kb.tabKey.isPressed;
+                case KeyCode.Backspace: return kb.backspaceKey.isPressed;
+                case KeyCode.Delete: return kb.deleteKey.isPressed;
+                case KeyCode.UpArrow: return kb.upArrowKey.isPressed;
+                case KeyCode.DownArrow: return kb.downArrowKey.isPressed;
+                case KeyCode.LeftArrow: return kb.leftArrowKey.isPressed;
+                case KeyCode.RightArrow: return kb.rightArrowKey.isPressed;
+                default: return false;
+            }
+        }
+
+        private static bool IsNewInputMouseButtonPressed(int button)
+        {
+            var m = Mouse.current;
+            if (m == null)
+                return false;
+
+            switch (button)
+            {
+                case 0: return m.leftButton.isPressed;
+                case 1: return m.rightButton.isPressed;
+                case 2: return m.middleButton.isPressed;
+                case 3: return m.backButton.isPressed;
+                case 4: return m.forwardButton.isPressed;
+                default: return false;
+            }
+        }
+#endif
     }
 }

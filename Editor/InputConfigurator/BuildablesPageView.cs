@@ -47,6 +47,7 @@ namespace TMBS.Editor.InputConfigurator
         private readonly SortedSet<string> _customCategories = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly SortedSet<string> _customSubcategories = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        private TmbsRootConfig _targetConfig;
         private TmbsBuildableData _selected;
         private string _categoryRenameSource = "General";
         private bool _gridView;
@@ -109,7 +110,9 @@ namespace TMBS.Editor.InputConfigurator
         private VisualElement _detailCatDot;
         private IMGUIContainer _detailThumb;
         private Label _detailTitleLabel;
+        private Label _defaultBuildableBadge;
         private Label _detailAssetPathLabel;
+        private Button _setDefaultBuildableBtn;
         private VisualElement _detailMissingTileBanner;
 
         private TextField _detDisplayNameField;
@@ -164,6 +167,12 @@ namespace TMBS.Editor.InputConfigurator
             BuildFilterAndSortToolbar();
             BuildMasterDetailWorkspace();
             BindDetailCallbacks();
+            Refresh();
+        }
+
+        public void Refresh(TmbsRootConfig targetConfig)
+        {
+            _targetConfig = targetConfig;
             Refresh();
         }
 
@@ -630,6 +639,14 @@ namespace TMBS.Editor.InputConfigurator
             _detailTitleLabel.style.fontSize = 14;
             _detailTitleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             nameRow.Add(_detailTitleLabel);
+
+            _defaultBuildableBadge = new Label("★ Default");
+            _defaultBuildableBadge.AddToClassList("tmbs-pill");
+            _defaultBuildableBadge.AddToClassList("tmbs-pill--ok");
+            _defaultBuildableBadge.style.marginLeft = 8;
+            _defaultBuildableBadge.style.display = DisplayStyle.None;
+            nameRow.Add(_defaultBuildableBadge);
+
             titleCol.Add(nameRow);
 
             _detailAssetPathLabel = new Label("—");
@@ -642,6 +659,14 @@ namespace TMBS.Editor.InputConfigurator
             var assetActionsCol = new VisualElement();
             assetActionsCol.style.flexDirection = FlexDirection.Row;
             assetActionsCol.style.flexWrap = Wrap.Wrap;
+
+            _setDefaultBuildableBtn = new Button(ToggleSelectedAsDefaultBuildable)
+            {
+                text = "Set Default",
+                tooltip = "Assign or unassign this buildable as TmbsRootConfig.defaultBuildable."
+            };
+            _setDefaultBuildableBtn.AddToClassList("tmbs-preset-btn");
+            assetActionsCol.Add(_setDefaultBuildableBtn);
 
             var pingBtn = new Button(PingSelectedAsset) { text = "Ping" };
             pingBtn.AddToClassList("tmbs-preset-btn");
@@ -1976,7 +2001,37 @@ namespace TMBS.Editor.InputConfigurator
             _detailMissingTileBanner.style.display = _selected.tile == null ? DisplayStyle.Flex : DisplayStyle.None;
             _detCreateTileBtn.SetEnabled(_selected.previewSprite != null);
             _detExtractSpriteBtn.SetEnabled(_selected.tile != null);
+            RefreshDefaultBuildableIndicator();
             _detailThumb.MarkDirtyRepaint();
+        }
+
+        private void RefreshDefaultBuildableIndicator()
+        {
+            if (_setDefaultBuildableBtn == null || _defaultBuildableBadge == null)
+                return;
+
+            bool hasConfig = _targetConfig != null;
+            bool isDefault = hasConfig && _selected != null && _targetConfig.defaultBuildable == _selected;
+
+            _setDefaultBuildableBtn.SetEnabled(hasConfig && _selected != null);
+            _setDefaultBuildableBtn.text = isDefault ? "Default ✓" : "Set Default";
+            _defaultBuildableBadge.style.display = isDefault ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        private void ToggleSelectedAsDefaultBuildable()
+        {
+            if (_targetConfig == null || _selected == null)
+                return;
+
+            bool clearing = _targetConfig.defaultBuildable == _selected;
+            Undo.RecordObject(_targetConfig, clearing ? "Clear Default Buildable" : "Set Default Buildable");
+            _targetConfig.defaultBuildable = clearing ? null : _selected;
+            EditorUtility.SetDirty(_targetConfig);
+
+            RefreshDefaultBuildableIndicator();
+            SetStatus(clearing
+                ? $"Cleared default buildable on '{_targetConfig.name}'."
+                : $"Set '{_selected.GetEffectiveDisplayName()}' as default buildable on '{_targetConfig.name}'.");
         }
 
         private void RefreshActiveTagsList()
@@ -2300,9 +2355,52 @@ namespace TMBS.Editor.InputConfigurator
 
         private void SyncToSceneUI()
         {
+#if UNITY_2023_1_OR_NEWER
+            var existingUi = UnityEngine.Object.FindAnyObjectByType<TmbsBuildingUI>();
+#else
+            var existingUi = UnityEngine.Object.FindObjectOfType<TmbsBuildingUI>();
+#endif
+            if (existingUi != null)
+            {
+                var foundBuildables = new List<TmbsBuildableData>();
+                for (int i = 0; i < _allBuildables.Count; i++)
+                {
+                    var asset = _allBuildables[i];
+                    if (asset != null && asset.tile != null && !foundBuildables.Contains(asset))
+                        foundBuildables.Add(asset);
+                }
+
+                foundBuildables.Sort((a, b) => TmbsBuildableData.Compare(a, b, _sortMode, _sortDescending));
+
+                Undo.RecordObject(existingUi, "Sync Buildables to Scene UI");
+                var so = new SerializedObject(existingUi);
+                var buildablesProp = so.FindProperty("buildables");
+                if (buildablesProp != null)
+                {
+                    buildablesProp.ClearArray();
+                    for (int i = 0; i < foundBuildables.Count; i++)
+                    {
+                        buildablesProp.InsertArrayElementAtIndex(i);
+                        buildablesProp.GetArrayElementAtIndex(i).objectReferenceValue = foundBuildables[i];
+                    }
+                    so.ApplyModifiedProperties();
+                }
+
+                EditorUtility.SetDirty(existingUi);
+                if (Application.isPlaying)
+                {
+                    existingUi.BuildCategoryTabs();
+                    existingUi.BuildPalette();
+                }
+
+                string dirLabel = _sortDescending ? "Desc" : "Asc";
+                SetStatus($"Updated Scene UI ({foundBuildables.Count} buildables, sorted by {_sortMode} {dirLabel}) without destroying layout.");
+                return;
+            }
+
             GameObject canvas = TMBS.Editor.TmbsBuildingUIBuilder.CreateOrUpdateSceneUI();
             if (canvas != null)
-                SetStatus("Synced Scene UI catalog using TmbsBuildingUIBuilder (CatalogOrder).");
+                SetStatus("Created Scene UI catalog using TmbsBuildingUIBuilder.");
             else
                 SetStatus("Could not auto-configure Scene UI (check Console or add a Grid/Tilemap first).");
         }

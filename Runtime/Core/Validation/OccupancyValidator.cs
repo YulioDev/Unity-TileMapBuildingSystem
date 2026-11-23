@@ -101,6 +101,10 @@ namespace TMBS.Core.Validation
             if (skipOccupiedCells && anyOccupied)
             {
                 var fb = markBlockedArea ? new ValidationFeedback(blocked) : default;
+                bool isBlueprint = ctx.BuildableData != null && ctx.BuildableData.isBlueprint && !ctx.AlternateBehaviour;
+                if (isBlueprint || (write != null && !write.AnyTrue()))
+                    return ValidationResult.InvalidWith(ValidationFailure.Occupied, fb, write);
+
                 return ValidationResult.ValidWith(fb, write);
             }
 

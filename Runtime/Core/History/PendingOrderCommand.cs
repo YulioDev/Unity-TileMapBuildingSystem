@@ -31,6 +31,7 @@ namespace TMBS.Core.History
         private readonly bool _replaceExisting;
         private readonly List<OrderRecord> _records;
         private readonly List<CancelledOrderRecord> _cancelledOrders;
+        private readonly IPendingWorkApi _workApi;
 
         public PendingOrderCommand(
             IPendingStore store,
@@ -39,13 +40,15 @@ namespace TMBS.Core.History
             List<(BoundsInt bounds, PendingCell[] cells, PendingState initialState)> orders,
             bool emitEvents,
             bool replaceExisting,
-            List<int> cancelOrderIds = null)
+            List<int> cancelOrderIds = null,
+            IPendingWorkApi workApi = null)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _events = events;
             _instanceId = instanceId;
             _emitEvents = emitEvents;
             _replaceExisting = replaceExisting;
+            _workApi = workApi;
             _records = new List<OrderRecord>(orders != null ? orders.Count : 0);
             _cancelledOrders = new List<CancelledOrderRecord>(cancelOrderIds != null ? cancelOrderIds.Count : 0);
 
@@ -98,6 +101,15 @@ namespace TMBS.Core.History
                     {
                         if (_store.TryGetByCell(cells[c].Cell, out var existing, out _))
                         {
+                            if (!HasCancelledOrder(existing))
+                            {
+                                _cancelledOrders.Add(new CancelledOrderRecord
+                                {
+                                    Order = existing,
+                                    PreviousState = existing.State,
+                                    CurrentOrderId = 0
+                                });
+                            }
                             CancelOrder(existing);
                         }
                     }
@@ -118,21 +130,29 @@ namespace TMBS.Core.History
             for (int r = 0; r < _records.Count; r++)
             {
                 var rec = _records[r];
-                if (rec.CurrentOrderId > 0 && _store.TryGet(rec.CurrentOrderId, out var pending))
+                int orderId = rec.CurrentOrderId;
+                PendingOrder pending = null;
+                bool activeInStore = orderId > 0 && _store.TryGet(orderId, out pending);
+                if (activeInStore)
                 {
                     var bounds = pending.Bounds;
                     pending.SetState(PendingState.Cancelled);
-                    _store.Remove(rec.CurrentOrderId);
-                    _events?.Publish(new PendingChangedEvent(_instanceId, rec.CurrentOrderId, PendingState.Cancelled));
-                    _events?.Publish(new PendingCompletedEvent(_instanceId, rec.CurrentOrderId, bounds));
-                    rec.WasCancelledByUndo = true;
-                    rec.CurrentOrderId = 0;
+                    _store.Remove(orderId);
+                    if (_emitEvents)
+                    {
+                        _events?.Publish(new PendingChangedEvent(_instanceId, orderId, PendingState.Cancelled));
+                        _events?.Publish(new PendingCompletedEvent(_instanceId, orderId, bounds));
+                    }
                 }
-                else
+
+                bool revertedCompleted = orderId > 0 && _workApi != null && _workApi.RevertCompletedOrderCells(orderId);
+                if (!activeInStore && revertedCompleted && _emitEvents)
                 {
-                    rec.WasCancelledByUndo = false;
-                    rec.CurrentOrderId = 0;
+                    _events?.Publish(new PendingCompletedEvent(_instanceId, orderId, rec.Bounds));
                 }
+
+                rec.WasCancelledByUndo = activeInStore || revertedCompleted;
+                rec.CurrentOrderId = 0;
             }
 
             for (int i = 0; i < _cancelledOrders.Count; i++)
@@ -226,12 +246,23 @@ namespace TMBS.Core.History
             var existingBounds = existing.Bounds;
             existing.SetState(PendingState.Cancelled);
             _store.Remove(existing.Id);
+            _workApi?.RevertCompletedOrderCells(existing.Id);
 
             if (_emitEvents)
             {
                 _events?.Publish(new PendingChangedEvent(_instanceId, existing.Id, PendingState.Cancelled));
                 _events?.Publish(new PendingCompletedEvent(_instanceId, existing.Id, existingBounds));
             }
+        }
+
+        private bool HasCancelledOrder(PendingOrder order)
+        {
+            for (int i = 0; i < _cancelledOrders.Count; i++)
+            {
+                if (ReferenceEquals(_cancelledOrders[i].Order, order))
+                    return true;
+            }
+            return false;
         }
 
         private bool HasOccupiedCell(PendingOrder order)

@@ -34,9 +34,26 @@ namespace TMBS.Core.Pending
 
         public int WorkAllowed(ResourceRequirement policy)
         {
-            if (ResourceRequired <= 0 || policy != ResourceRequirement.AllowPartialDelivery)
+            if (ResourceRequired <= 0 || policy == ResourceRequirement.None)
+                return WorkRequired;
+            if (policy != ResourceRequirement.AllowPartialDelivery)
                 return IsReadyForWork ? WorkRequired : 0;
-            return WorkRequired * ResourceDelivered / ResourceRequired;
+            if (ResourceDelivered <= 0)
+                return 0;
+            if (ResourceDelivered >= ResourceRequired)
+                return WorkRequired;
+            return (WorkRequired * ResourceDelivered + ResourceRequired - 1) / ResourceRequired;
+        }
+
+        public PendingState GetCellVisualState(ResourceRequirement policy)
+        {
+            if (IsCompleted)
+                return PendingState.Completed;
+            if (WorkDone > 0)
+                return PendingState.InProgress;
+            if (WorkAllowed(policy) <= 0)
+                return PendingState.WaitingForResources;
+            return PendingState.ReadyToBuild;
         }
 
         public PendingCell(

@@ -1,7 +1,16 @@
 using System.Collections.Generic;
 using NUnit.Framework;
+using TMBS.Core.Events;
+using TMBS.Core.Execution;
+using TMBS.Core.History;
+using TMBS.Core.Metadata;
+using TMBS.Core.Pending;
+using TMBS.Core.Pipeline;
+using TMBS.Core.Selection;
+using TMBS.Core.Validation;
 using TMBS.Runtime.Config;
 using TMBS.UI;
+using TMBS.Unity.Tilemaps;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 using UnityEngine.UI;
@@ -358,6 +367,322 @@ namespace TMBS.Editor.Tests
             Assert.AreEqual(0, TmbsBuildableData.Compare(null, null, TmbsBuildableSortMode.Name));
             Assert.Greater(TmbsBuildableData.Compare(null, alpha, TmbsBuildableSortMode.Name), 0);
             Assert.Less(TmbsBuildableData.Compare(alpha, null, TmbsBuildableSortMode.Name, descending: true), 0);
+        }
+
+        [Test]
+        public void TileSelectionState_RespectsCanRotateAndCanMirrorFlags()
+        {
+            var tile = Track(ScriptableObject.CreateInstance<Tile>());
+            var lockedData = Track(ScriptableObject.CreateInstance<TmbsBuildableData>());
+            lockedData.tile = tile;
+            lockedData.canRotate = false;
+            lockedData.canMirror = false;
+
+            var state = new TileSelectionState();
+            state.UpdateFromSelection(new BuildSelectionData(tile, lockedData));
+            state.Rotate();
+            state.Mirror();
+
+            Assert.AreEqual(0, state.Transform.Rotation, "Rotation must be blocked when canRotate is false.");
+            Assert.IsFalse(state.Transform.Mirrored, "Mirroring must be blocked when canMirror is false.");
+
+            var unlockedData = Track(ScriptableObject.CreateInstance<TmbsBuildableData>());
+            unlockedData.tile = tile;
+            unlockedData.canRotate = true;
+            unlockedData.canMirror = true;
+
+            state.UpdateFromSelection(new BuildSelectionData(tile, unlockedData));
+            state.Rotate();
+            state.Mirror();
+
+            Assert.AreEqual(1, state.Transform.Rotation);
+            Assert.IsTrue(state.Transform.Mirrored);
+        }
+
+        [Test]
+        public void OccupancyValidators_RejectPartialBlueprints_AndReportAllOccupiedAsInvalid()
+        {
+            var gridGo = Track(new GameObject("Grid", typeof(Grid)));
+            var tilemapGo = Track(new GameObject("TargetTilemap", typeof(Tilemap), typeof(TilemapRenderer)));
+            tilemapGo.transform.SetParent(gridGo.transform, false);
+            var tilemap = tilemapGo.GetComponent<Tilemap>();
+
+            var occupiedTile = Track(ScriptableObject.CreateInstance<Tile>());
+            tilemap.SetTile(new Vector3Int(1, 0, 0), occupiedTile);
+
+            var occValidator = new OccupancyValidator
+            {
+                skipOccupiedCells = true,
+                markBlockedArea = true
+            };
+            occValidator.InjectOccupancySource(new TilemapOccupancy(tilemap));
+
+            var bpData = Track(ScriptableObject.CreateInstance<TmbsBuildableData>());
+            bpData.isBlueprint = true;
+            bpData.footprintSize = new Vector2Int(2, 2);
+            bpData.tile = occupiedTile;
+
+            var bpCtx = new PipelineContext
+            {
+                Cell = Vector3Int.zero,
+                DragBounds = new BoundsInt(0, 0, 0, 2, 2, 1),
+                HasDragBounds = true,
+                SelectedTile = occupiedTile,
+                BuildableData = bpData
+            };
+
+            var bpRes = occValidator.Validate(in bpCtx, ValidationMode.Full);
+            Assert.IsFalse(bpRes.IsValid, "Blueprint partially overlapping an occupied cell must be rejected.");
+            Assert.AreEqual(ValidationFailure.Occupied, bpRes.Failure);
+
+            var singleData = Track(ScriptableObject.CreateInstance<TmbsBuildableData>());
+            singleData.isBlueprint = false;
+            singleData.tile = occupiedTile;
+
+            var singleCtx = new PipelineContext
+            {
+                Cell = new Vector3Int(1, 0, 0),
+                HasDragBounds = false,
+                SelectedTile = occupiedTile,
+                BuildableData = singleData
+            };
+
+            var singleRes = occValidator.Validate(in singleCtx, ValidationMode.Full);
+            Assert.IsFalse(singleRes.IsValid, "Zero free cells under skipOccupiedCells must report InvalidWith(Occupied).");
+            Assert.AreEqual(ValidationFailure.Occupied, singleRes.Failure);
+
+            // PendingOccupancyValidator partial blueprint rejection & AllowReplaceExisting
+            var store = new PendingStore();
+            store.Add(new PendingOrder(
+                "inst",
+                new BoundsInt(1, 0, 0, 1, 1, 1),
+                new[] { new PendingCell(new Vector3Int(1, 0, 0), occupiedTile, 1, 0, 0, 0) },
+                PendingState.ReadyToBuild));
+
+            var pendingOcc = new PendingOccupancyValidator();
+            pendingOcc.InjectStore(store);
+
+            var pBpRes = pendingOcc.Validate(in bpCtx, ValidationMode.Full);
+            Assert.IsFalse(pBpRes.IsValid, "PendingOccupancyValidator must reject partial blueprint placement.");
+            Assert.AreEqual(ValidationFailure.Occupied, pBpRes.Failure);
+
+            pendingOcc.AllowReplaceExisting = true;
+            Assert.IsTrue(pendingOcc.Validate(in bpCtx, ValidationMode.Full).IsValid, "AllowReplaceExisting must bypass pending blocking.");
+
+            CellMaskPool.ReclaimAll();
+        }
+
+        [Test]
+        public void ImmediateBuildExecutor_PlacesBlueprintFootprintTiles_AndDismantlesWholeBlueprintOnErase()
+        {
+            var gridGo = Track(new GameObject("Grid", typeof(Grid)));
+            var tilemapGo = Track(new GameObject("TargetTilemap", typeof(Tilemap), typeof(TilemapRenderer)));
+            tilemapGo.transform.SetParent(gridGo.transform, false);
+            var tilemap = tilemapGo.GetComponent<Tilemap>();
+
+            var t0 = Track(ScriptableObject.CreateInstance<Tile>());
+            var t1 = Track(ScriptableObject.CreateInstance<Tile>());
+            var t2 = Track(ScriptableObject.CreateInstance<Tile>());
+            var t3 = Track(ScriptableObject.CreateInstance<Tile>());
+
+            var bpData = Track(ScriptableObject.CreateInstance<TmbsBuildableData>());
+            bpData.isBlueprint = true;
+            bpData.footprintSize = new Vector2Int(2, 2);
+            bpData.maxHealth = 120;
+            bpData.tile = t0;
+            bpData.footprintTiles = new List<TileBase> { t0, t1, t2, t3 };
+
+            var metadata = new MetadataStore(16);
+            var history = new UndoRedoHistory();
+            var executor = new ImmediateBuildExecutor(metadata, history, new SimpleEventBus(), false);
+
+            var placeBounds = new BoundsInt(0, 0, 0, 2, 2, 1);
+            var placeCtx = new PipelineContext
+            {
+                InstanceId = "test",
+                Cell = Vector3Int.zero,
+                DragBounds = placeBounds,
+                HasDragBounds = true,
+                SelectedTile = t0,
+                BuildableData = bpData,
+                Decision = ExecutionDecision.Immediate(t0, CellMask.AllTrue(placeBounds))
+            };
+
+            executor.Execute(in placeCtx, tilemap);
+
+            Assert.AreEqual(4, metadata.Count);
+            Assert.AreEqual(t0, tilemap.GetTile(new Vector3Int(0, 0, 0)));
+            Assert.AreEqual(t1, tilemap.GetTile(new Vector3Int(1, 0, 0)));
+            Assert.AreEqual(t2, tilemap.GetTile(new Vector3Int(0, 1, 0)));
+            Assert.AreEqual(t3, tilemap.GetTile(new Vector3Int(1, 1, 0)));
+            Assert.IsTrue(metadata.TryGet(new Vector3Int(1, 1, 0), out var rec));
+            Assert.AreEqual(120, rec.CurrentHealth);
+            Assert.AreEqual(placeBounds, rec.FootprintBounds);
+
+            // Erase ONLY 1 cell of the 2x2 blueprint -> whole blueprint should dismantle atomically
+            var eraseCell = new Vector3Int(0, 0, 0);
+            var eraseCtx = new PipelineContext
+            {
+                InstanceId = "test",
+                Cell = eraseCell,
+                AlternateBehaviour = true,
+                Decision = ExecutionDecision.Immediate(null, CellMask.AllTrue(new BoundsInt(eraseCell, Vector3Int.one)))
+            };
+
+            executor.Execute(in eraseCtx, tilemap);
+
+            Assert.AreEqual(0, metadata.Count, "Dismantling any cell of a multi-cell blueprint must remove all 4 metadata records.");
+            Assert.IsNull(tilemap.GetTile(new Vector3Int(1, 1, 0)));
+
+            Assert.IsTrue(history.TryUndo());
+            Assert.AreEqual(4, metadata.Count, "Undo after erasing blueprint must restore all 4 cells.");
+            Assert.AreEqual(t3, tilemap.GetTile(new Vector3Int(1, 1, 0)));
+        }
+
+        [Test]
+        public void MetadataStore_EnforcesRecordCapacity_FIFO()
+        {
+            var store = new MetadataStore(capacity: 2);
+            var tile = Track(ScriptableObject.CreateInstance<Tile>());
+
+            store.Set(new BuildRecord(tile, new Vector3Int(0, 0, 0), BuildState.Completed));
+            store.Set(new BuildRecord(tile, new Vector3Int(1, 0, 0), BuildState.Completed));
+            store.Set(new BuildRecord(tile, new Vector3Int(2, 0, 0), BuildState.Completed));
+
+            Assert.AreEqual(2, store.Count);
+            Assert.AreEqual(2, store.GetAll().Count);
+            Assert.IsFalse(store.TryGet(new Vector3Int(0, 0, 0), out _), "Oldest record should be evicted when capacity is exceeded.");
+            Assert.IsTrue(store.TryGet(new Vector3Int(1, 0, 0), out _));
+            Assert.IsTrue(store.TryGet(new Vector3Int(2, 0, 0), out _));
+        }
+
+        [Test]
+        public void PendingSystem_FixedCostMode_PartialDeliveryCeil_AndUndoAfterCompletion()
+        {
+            // 1) Partial delivery ceil check when workCost < resourceCost
+            var partialCell = new PendingCell(Vector3Int.zero, null, workRequired: 1, workDone: 0, resourceRequired: 4, resourceDelivered: 1);
+            Assert.AreEqual(1, partialCell.WorkAllowed(ResourceRequirement.AllowPartialDelivery));
+
+            // 2) FixedPerCell cost mode vs DefinitionProvider & Undo after completion
+            var gridGo = Track(new GameObject("Grid", typeof(Grid)));
+            var tilemapGo = Track(new GameObject("TargetTilemap", typeof(Tilemap), typeof(TilemapRenderer)));
+            tilemapGo.transform.SetParent(gridGo.transform, false);
+            var tilemap = tilemapGo.GetComponent<Tilemap>();
+
+            var tile = Track(ScriptableObject.CreateInstance<Tile>());
+            var data = Track(ScriptableObject.CreateInstance<TmbsBuildableData>());
+            data.tile = tile;
+            data.workCost = 2;
+            data.resourceCost = 5;
+
+            var store = new PendingStore();
+            var events = new SimpleEventBus();
+            var metadata = new MetadataStore(16);
+            var history = new UndoRedoHistory();
+            var cfg = new TmbsPendingConfig
+            {
+                costMode = PendingCostMode.FixedPerCell,
+                workCost = 7,
+                resourceCost = 3,
+                resourcePolicy = ResourceRequirement.AllowPartialDelivery,
+                replaceExistingPending = true
+            };
+
+            var workApi = new PendingWorkApi(store, events, tilemap, metadata, "inst", true, cfg.resourcePolicy, true, true);
+            var executor = new PendingBuildExecutor(store, events, cfg, history, workApi);
+
+            var c0 = new Vector3Int(0, 0, 0);
+            var ctx = new PipelineContext
+            {
+                InstanceId = "inst",
+                Cell = c0,
+                SelectedTile = tile,
+                BuildableData = data,
+                Decision = ExecutionDecision.Pending(tile, CellMask.AllTrue(new BoundsInt(c0, Vector3Int.one)))
+            };
+
+            executor.Execute(in ctx, tilemap);
+            Assert.IsTrue(workApi.TryGetCellStatus(c0, out var status));
+            Assert.AreEqual(7, status.WorkRequired, "FixedPerCell mode must use TmbsPendingConfig.workCost.");
+            Assert.AreEqual(3, status.ResourceRequired, "FixedPerCell mode must use TmbsPendingConfig.resourceCost.");
+
+            // Complete using DefinitionProvider
+            cfg.costMode = PendingCostMode.DefinitionProvider;
+            var c1 = new Vector3Int(1, 0, 0);
+            var ctx1 = new PipelineContext
+            {
+                InstanceId = "inst",
+                Cell = c1,
+                SelectedTile = tile,
+                BuildableData = data,
+                Decision = ExecutionDecision.Pending(tile, CellMask.AllTrue(new BoundsInt(c1, Vector3Int.one)))
+            };
+
+            executor.Execute(in ctx1, tilemap);
+            Assert.IsTrue(workApi.TryDeliverResources(c1, 5));
+            Assert.IsTrue(workApi.TryAddWork(c1, 2));
+            Assert.IsTrue(workApi.TryCompleteCell(c1));
+            Assert.AreEqual(tile, tilemap.GetTile(c1));
+            Assert.IsTrue(metadata.TryGet(c1, out _));
+
+            // Undo completed pending order -> must revert placed tile & metadata
+            Assert.IsTrue(history.TryUndo());
+            Assert.IsNull(tilemap.GetTile(c1), "Undo of a completed pending order must revert its tile from the tilemap.");
+            Assert.IsFalse(metadata.TryGet(c1, out _), "Undo of a completed pending order must remove its BuildRecord.");
+
+            // Redo -> re-queues pending order on c1
+            Assert.IsTrue(history.TryRedo());
+            Assert.IsTrue(workApi.TryGetCellStatus(c1, out _), "Redo must re-queue the pending order.");
+
+            // Replace existing order on c0 & verify Undo restores replaced order
+            executor.Execute(in ctx, tilemap);
+            Assert.IsTrue(workApi.TryGetCellStatus(c0, out _));
+            Assert.IsTrue(history.TryUndo());
+            Assert.IsTrue(workApi.TryGetCellStatus(c0, out _), "Undo after replacing an existing pending order must restore the prior order.");
+        }
+
+        [Test]
+        public void BuildingUI_AppliesPixelPerfect1280x720_AndTogglesRotateMirrorButtonInteractability()
+        {
+            var uiGo = Track(new GameObject("Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(RectTransform), typeof(TmbsBuildingUI)));
+            var canvas = uiGo.GetComponent<Canvas>();
+            canvas.pixelPerfect = false;
+            var scaler = uiGo.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+
+            var ui = uiGo.GetComponent<TmbsBuildingUI>();
+
+            var rotateBtnGo = Track(new GameObject("BtnRotate", typeof(RectTransform), typeof(Image), typeof(Button)));
+            rotateBtnGo.transform.SetParent(uiGo.transform, false);
+            var mirrorBtnGo = Track(new GameObject("BtnMirror", typeof(RectTransform), typeof(Image), typeof(Button)));
+            mirrorBtnGo.transform.SetParent(uiGo.transform, false);
+
+            var rotateBtn = rotateBtnGo.GetComponent<Button>();
+            var mirrorBtn = mirrorBtnGo.GetComponent<Button>();
+
+            SetPrivateField(ui, "rotateButton", rotateBtn);
+            SetPrivateField(ui, "mirrorButton", mirrorBtn);
+
+            InvokePrivate(ui, "ApplyPixelPerfectAndTextCrispness");
+
+            Assert.IsTrue(canvas.pixelPerfect, "TmbsBuildingUI must enforce Canvas.pixelPerfect.");
+            Assert.AreEqual(new Vector2(1280f, 720f), scaler.referenceResolution, "TmbsBuildingUI must upgrade legacy 1080p reference resolution to 1280x720.");
+
+            var locked = Track(ScriptableObject.CreateInstance<TmbsBuildableData>());
+            locked.tile = Track(ScriptableObject.CreateInstance<Tile>());
+            locked.canRotate = false;
+            locked.canMirror = false;
+
+            InvokePrivate(ui, "RefreshActiveItemDisplay", locked, locked.tile);
+            Assert.IsFalse(rotateBtn.interactable, "Rotate button must be disabled when canRotate is false.");
+            Assert.IsFalse(mirrorBtn.interactable, "Mirror button must be disabled when canMirror is false.");
+
+            locked.canRotate = true;
+            locked.canMirror = true;
+            InvokePrivate(ui, "RefreshActiveItemDisplay", locked, locked.tile);
+            Assert.IsTrue(rotateBtn.interactable);
+            Assert.IsTrue(mirrorBtn.interactable);
         }
 
         private GameObject CreateMinimalSlotPrefab(string name)

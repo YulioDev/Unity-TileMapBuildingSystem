@@ -220,7 +220,7 @@ namespace TMBS.UI
             textRt.offsetMax = new Vector2(-3f, 0f);
 
             costBadgeText.fontSize = 10;
-            costBadgeText.resizeTextForBestFit = true;
+            costBadgeText.resizeTextForBestFit = false;
             costBadgeText.resizeTextMinSize = 8;
             costBadgeText.resizeTextMaxSize = 11;
             costBadgeText.fontStyle = FontStyle.Bold;
@@ -304,7 +304,7 @@ namespace TMBS.UI
                     font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
                 hotkeyText.font = font;
                 hotkeyText.fontSize = 10;
-                hotkeyText.resizeTextForBestFit = true;
+                hotkeyText.resizeTextForBestFit = false;
                 hotkeyText.resizeTextMinSize = 9;
                 hotkeyText.resizeTextMaxSize = 11;
                 hotkeyText.fontStyle = FontStyle.Bold;
@@ -528,6 +528,7 @@ namespace TMBS.UI
         {
             if (labelText != null)
             {
+                labelText.resizeTextForBestFit = false;
                 labelText.text = text;
             }
         }

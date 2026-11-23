@@ -62,7 +62,9 @@ namespace TMBS.Unity.Input
             hasDrag:               _dragRef?.action != null,
             hasUndo:               _undoRef?.action != null,
             hasRedo:               _redoRef?.action != null,
-            hasAlternateModifier:  _alternateRef?.action != null);
+            hasAlternateModifier:  _alternateRef?.action != null,
+            hasRotate:             _rotateRef?.action != null,
+            hasMirror:             _mirrorRef?.action != null);
 
         public event Action<BuildIntent> BuildIntentRaised;
 

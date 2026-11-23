@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using TMBS.Core.Pending;
+using TMBS.Core.Selection;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
@@ -88,6 +89,9 @@ namespace TMBS.Runtime.Config
         [Tooltip("Size in cells. Only used when isBlueprint is true.")]
         public Vector2Int footprintSize = Vector2Int.one;
 
+        [Tooltip("Optional per-cell tiles (row-major: x + y * width) for multi-tile blueprints. Falls back to primary tile when empty or null at index.")]
+        public List<TileBase> footprintTiles = new List<TileBase>();
+
         [Header("Gameplay & Placement")]
         [Min(0)]
         [Tooltip("Optional hit points / durability (0 = indestructible or unused).")]
@@ -128,6 +132,28 @@ namespace TMBS.Runtime.Config
         {
             var size = GetSize();
             return new BoundsInt(anchor, new Vector3Int(size.x, size.y, 1));
+        }
+
+        public BoundsInt GetFootprint(Vector3Int anchor, PlacementTransform transform)
+        {
+            var size = transform.Apply(GetSize());
+            return new BoundsInt(anchor, new Vector3Int(size.x, size.y, 1));
+        }
+
+        public TileBase GetTileAtLocalOffset(int localX, int localY)
+        {
+            if (isBlueprint && footprintTiles != null && footprintTiles.Count > 0)
+            {
+                var size = GetSize();
+                if (localX >= 0 && localX < size.x && localY >= 0 && localY < size.y)
+                {
+                    int index = localX + localY * size.x;
+                    if (index >= 0 && index < footprintTiles.Count && footprintTiles[index] != null)
+                        return footprintTiles[index];
+                }
+            }
+
+            return tile;
         }
 
         public virtual int GetWorkCost(Vector3Int cell) => workCost;

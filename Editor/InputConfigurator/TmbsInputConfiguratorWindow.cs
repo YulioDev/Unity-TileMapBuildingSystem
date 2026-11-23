@@ -444,7 +444,7 @@ namespace TMBS.Editor.InputConfigurator
             _modeCardsView?.Refresh(_targetConfig);
             _controlsView?.Refresh(_targetConfig);
             _liveTesterView?.RefreshPlayModeState(_targetConfig);
-            _buildablesView?.Refresh();
+            _buildablesView?.Refresh(_targetConfig);
             RefreshFooter();
         }
 

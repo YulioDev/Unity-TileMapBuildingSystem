@@ -50,46 +50,113 @@ namespace TMBS.Core.Execution
             }
 
             var changeList = new List<TileChange>(writeMask.Length);
-            var beforeTiles = targetTilemap.GetTilesBlock(bounds);
+            var effectiveBounds = bounds;
 
-            for (int z = 0; z < bounds.size.z; z++)
+            if (ctx.AlternateBehaviour)
             {
-                for (int y = 0; y < bounds.size.y; y++)
+                var eraseCells = new HashSet<Vector3Int>();
+                for (int i = 0; i < writeMask.Length; i++)
                 {
-                    for (int x = 0; x < bounds.size.x; x++)
+                    if (!writeMask.Bits[i])
+                        continue;
+
+                    var cell = writeMask.CellAt(i);
+                    eraseCells.Add(cell);
+
+                    if (_metadata != null && _metadata.TryGet(cell, out var existingRec) &&
+                        (existingRec.FootprintBounds.size.x > 1 || existingRec.FootprintBounds.size.y > 1))
                     {
-                        var cell = bounds.position + new Vector3Int(x, y, z);
+                        foreach (var bpPos in existingRec.FootprintBounds.allPositionsWithin)
+                            eraseCells.Add(bpPos);
+                    }
+                }
 
-                        if (!writeMask.Bits[writeMask.IndexOf(cell)])
-                            continue;
+                if (eraseCells.Count > 0)
+                {
+                    Vector3Int min = bounds.min;
+                    Vector3Int max = bounds.max;
+                    bool hasBounds = false;
 
-                        int blockIndex = TMBS.Core.Grid.TileBlockIndex.IndexOf(bounds, cell);
-                        var beforeTile = beforeTiles[blockIndex];
-
+                    foreach (var cell in eraseCells)
+                    {
+                        var beforeTile = targetTilemap.GetTile(cell);
                         BuildRecord? beforeMeta = null;
                         if (_metadata != null && _metadata.TryGet(cell, out var record))
-                        {
                             beforeMeta = record;
-                        }
 
-                        if (ctx.AlternateBehaviour && beforeTile == null && !beforeMeta.HasValue)
+                        if (beforeTile == null && !beforeMeta.HasValue)
                             continue;
 
                         var beforeMatrix = targetTilemap.GetTransformMatrix(cell);
-                        var afterTile = ctx.AlternateBehaviour ? ctx.Decision.AlternateWriteTile : ctx.Decision.WriteTile;
-                        var afterMatrix = ctx.AlternateBehaviour ? Matrix4x4.identity : ctx.Decision.TransformMatrix;
+                        var afterTile = ctx.Decision.AlternateWriteTile;
 
-                        BuildRecord? afterMeta = null;
-                        if (afterTile != null && ctx.Decision.ConstructionId > 0)
+                        changeList.Add(new TileChange(cell, beforeTile, afterTile, beforeMeta, null, beforeMatrix, Matrix4x4.identity));
+
+                        if (!hasBounds)
                         {
-                            afterMeta = new BuildRecord(
-                                afterTile,
-                                cell,
-                                BuildState.Completed,
-                                ctx.BuildableData);
+                            min = cell;
+                            max = cell + Vector3Int.one;
+                            hasBounds = true;
                         }
+                        else
+                        {
+                            min = Vector3Int.Min(min, cell);
+                            max = Vector3Int.Max(max, cell + Vector3Int.one);
+                        }
+                    }
 
-                        changeList.Add(new TileChange(cell, beforeTile, afterTile, beforeMeta, afterMeta, beforeMatrix, afterMatrix));
+                    if (hasBounds)
+                        effectiveBounds = new BoundsInt(min, max - min);
+                }
+            }
+            else
+            {
+                var beforeTiles = targetTilemap.GetTilesBlock(bounds);
+                bool isBlueprint = ctx.BuildableData != null && ctx.BuildableData.isBlueprint;
+
+                for (int z = 0; z < bounds.size.z; z++)
+                {
+                    for (int y = 0; y < bounds.size.y; y++)
+                    {
+                        for (int x = 0; x < bounds.size.x; x++)
+                        {
+                            var cell = bounds.position + new Vector3Int(x, y, z);
+
+                            if (!writeMask.Bits[writeMask.IndexOf(cell)])
+                                continue;
+
+                            int blockIndex = TMBS.Core.Grid.TileBlockIndex.IndexOf(bounds, cell);
+                            var beforeTile = beforeTiles[blockIndex];
+
+                            BuildRecord? beforeMeta = null;
+                            if (_metadata != null && _metadata.TryGet(cell, out var record))
+                                beforeMeta = record;
+
+                            var beforeMatrix = targetTilemap.GetTransformMatrix(cell);
+                            var afterTile = isBlueprint
+                                ? (ctx.BuildableData.GetTileAtLocalOffset(x, y) ?? ctx.Decision.WriteTile)
+                                : ctx.Decision.WriteTile;
+                            var afterMatrix = ctx.Decision.TransformMatrix;
+
+                            BuildRecord? afterMeta = null;
+                            if (afterTile != null && ctx.Decision.ConstructionId > 0)
+                            {
+                                Vector3Int anchor = isBlueprint ? bounds.position : cell;
+                                BoundsInt fpBounds = isBlueprint ? bounds : new BoundsInt(cell, Vector3Int.one);
+                                int maxHp = ctx.BuildableData != null ? ctx.BuildableData.maxHealth : 0;
+
+                                afterMeta = new BuildRecord(
+                                    afterTile,
+                                    cell,
+                                    BuildState.Completed,
+                                    ctx.BuildableData,
+                                    anchor,
+                                    fpBounds,
+                                    maxHp);
+                            }
+
+                            changeList.Add(new TileChange(cell, beforeTile, afterTile, beforeMeta, afterMeta, beforeMatrix, afterMatrix));
+                        }
                     }
                 }
             }
@@ -105,7 +172,7 @@ namespace TMBS.Core.Execution
                 targetTilemap,
                 changes,
                 _metadata,
-                bounds,
+                effectiveBounds,
                 _emitRegionEvents ? (b) => NotifyRegionModified(instanceId, b) : (Action<BoundsInt>)null);
 
             if (_history != null)

@@ -2,6 +2,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using TMBS.Core.Events;
+using TMBS.Core.Intents;
+using TMBS.Core.Pending;
 using TMBS.Core.Validation;
 using TMBS.Runtime.Config;
 using TMBS.Runtime.Interface;
@@ -100,6 +102,8 @@ namespace TMBS.UI
         private bool _hasInitializedPalette;
         private Font _defaultFont;
         private float _lastValidationToastTime = -1f;
+        private Vector3Int _lastInspectedCell;
+        private bool _hasInspectedCell;
 
         // Subscriptions
         private IDisposable _selectionChangedSub;
@@ -230,6 +234,7 @@ namespace TMBS.UI
             EnsureEventSystemExists();
             ResolveBuildeableTilemap();
             EnsureRuntimeBindingsAndFallbacks();
+            ApplyThemeToPanelsAndButtons();
             HookButtons();
 
             if (paletteContainer != null)
@@ -263,6 +268,7 @@ namespace TMBS.UI
             UpdatePendingCount();
             RefreshEraseButtonVisual();
             UpdateUndoRedoInteractability();
+            RefreshActionShortcutLabels();
         }
 
         private void OnDisable()
@@ -337,6 +343,134 @@ namespace TMBS.UI
 
             EnsureActiveIconAspectFallback();
             EnsureLegacyToolbarButtons();
+            ApplyPixelPerfectAndTextCrispness();
+        }
+
+        private void ApplyPixelPerfectAndTextCrispness()
+        {
+            var rootCanvas = GetComponentInParent<Canvas>();
+            if (rootCanvas != null)
+            {
+                rootCanvas.pixelPerfect = true;
+
+                var scaler = rootCanvas.GetComponent<CanvasScaler>();
+                if (scaler != null &&
+                    scaler.uiScaleMode == CanvasScaler.ScaleMode.ScaleWithScreenSize &&
+                    Mathf.Approximately(scaler.referenceResolution.x, 1920f) &&
+                    Mathf.Approximately(scaler.referenceResolution.y, 1080f))
+                {
+                    scaler.referenceResolution = new Vector2(1280f, 720f);
+                }
+            }
+
+            DisableBestFit(titleText);
+            DisableBestFit(activeItemNameText);
+            DisableBestFit(activeItemDetailsText);
+            DisableBestFit(pendingCountText);
+            DisableBestFit(toastText);
+            DisableBestFit(paletteHeaderText);
+
+            DisableBestFitForButton(rotateButton);
+            DisableBestFitForButton(mirrorButton);
+            DisableBestFitForButton(eraseButton);
+            DisableBestFitForButton(clearButton);
+            DisableBestFitForButton(undoButton);
+            DisableBestFitForButton(redoButton);
+            DisableBestFitForButton(toggleExpandCatalogButton);
+        }
+
+        private static void DisableBestFit(Text txt)
+        {
+            if (txt != null)
+                txt.resizeTextForBestFit = false;
+        }
+
+        private static void DisableBestFitForButton(Button btn)
+        {
+            if (btn == null)
+                return;
+
+            DisableBestFit(btn.GetComponentInChildren<Text>(true));
+        }
+
+        private void ApplyThemeToPanelsAndButtons()
+        {
+            var t = Theme;
+
+            ApplyPanelSurface(activeItemPanel, t.panelBackgroundColor, t.panelBorderColor);
+            if (bottomDockPanel != null)
+                ApplyPanelSurface(bottomDockPanel.gameObject, t.panelBackgroundColor, t.panelBorderColor);
+            ApplyPanelSurface(pendingPanel, t.pendingPanelColor, t.pendingAccentColor);
+
+            if (titleText != null)
+                titleText.color = t.headerAccentColor;
+
+            ApplyButtonTheme(rotateButton, t.neutralButtonColor, t.panelBorderColor);
+            ApplyButtonTheme(mirrorButton, t.neutralButtonColor, t.panelBorderColor);
+            ApplyButtonTheme(undoButton, t.neutralButtonColor, t.panelBorderColor);
+            ApplyButtonTheme(redoButton, t.neutralButtonColor, t.panelBorderColor);
+            ApplyButtonTheme(clearButton, t.clearButtonColor, t.panelBorderColor);
+            ApplyButtonTheme(toggleExpandCatalogButton, t.neutralButtonColor, t.panelBorderColor);
+        }
+
+        private static void ApplyPanelSurface(GameObject panelObj, Color bgColor, Color borderColor)
+        {
+            if (panelObj == null)
+                return;
+
+            var img = panelObj.GetComponent<Image>();
+            if (img != null)
+                img.color = bgColor;
+
+            EnsureOutline(panelObj, borderColor);
+        }
+
+        private static void ApplyButtonTheme(Button btn, Color bgColor, Color borderColor)
+        {
+            if (btn == null)
+                return;
+
+            var img = btn.GetComponent<Image>();
+            if (img != null)
+                img.color = bgColor;
+
+            ApplyNormalizedButtonColors(btn);
+            EnsureOutline(btn.gameObject, borderColor);
+        }
+
+        private void RefreshActionShortcutLabels()
+        {
+            var inputCfg = buildeableTilemap != null && buildeableTilemap.RootConfig != null
+                ? buildeableTilemap.RootConfig.input
+                : null;
+
+            if (inputCfg == null || inputCfg.mode != TmbsInputMode.Legacy)
+                return;
+
+            var bindings = inputCfg.GetLegacyBindings();
+            if (bindings == null)
+                return;
+
+            SetButtonShortcutLabel(rotateButton, "Rotate", bindings.rotate);
+            SetButtonShortcutLabel(mirrorButton, "Mirror", bindings.mirror);
+            SetButtonShortcutLabel(undoButton, "Undo", bindings.undo);
+            SetButtonShortcutLabel(redoButton, "Redo", bindings.redo);
+        }
+
+        private static void SetButtonShortcutLabel(Button btn, string baseLabel, TmbsActionBinding binding)
+        {
+            if (btn == null)
+                return;
+
+            var label = btn.GetComponentInChildren<Text>(true);
+            if (label == null)
+                return;
+
+            var slot = binding.primary.IsBound ? binding.primary : binding.secondary;
+            string keyText = slot.IsBound ? slot.ToDisplayString() : string.Empty;
+            label.text = !string.IsNullOrEmpty(keyText)
+                ? $"{baseLabel} [{keyText}]"
+                : baseLabel;
         }
 
         private RectTransform ResolveBottomDockPanel()
@@ -665,7 +799,7 @@ namespace TMBS.UI
                 return;
 
             text.fontSize = fontSize;
-            text.resizeTextForBestFit = true;
+            text.resizeTextForBestFit = false;
             text.resizeTextMinSize = minSize;
             text.resizeTextMaxSize = maxSize;
         }
@@ -697,10 +831,16 @@ namespace TMBS.UI
             _pendingCreatedSub = events.Subscribe<PendingCreatedEvent>(OnTmbsPendingUpdated);
             _pendingChangedSub = events.Subscribe<PendingChangedEvent>(OnTmbsPendingUpdated);
             _pendingCompletedSub = events.Subscribe<PendingCompletedEvent>(OnTmbsPendingUpdated);
+
+            buildeableTilemap.IntentObserved -= OnTilemapIntentObserved;
+            buildeableTilemap.IntentObserved += OnTilemapIntentObserved;
         }
 
         private void UnsubscribeFromTmbsEvents()
         {
+            if (buildeableTilemap != null)
+                buildeableTilemap.IntentObserved -= OnTilemapIntentObserved;
+
             _selectionChangedSub?.Dispose();
             _selectionChangedSub = null;
 
@@ -1024,13 +1164,19 @@ namespace TMBS.UI
 
             var themeSettings = Theme;
 
-            if (buildables != null)
+            if (buildables != null && buildables.Count > 0)
             {
-                foreach (var data in buildables)
+                var sortedBuildables = new List<TmbsBuildableData>(buildables.Count);
+                for (int i = 0; i < buildables.Count; i++)
                 {
-                    if (data == null)
-                        continue;
+                    if (buildables[i] != null)
+                        sortedBuildables.Add(buildables[i]);
+                }
 
+                sortedBuildables.Sort((a, b) => TmbsBuildableData.Compare(a, b, TmbsBuildableSortMode.CatalogOrder));
+
+                foreach (var data in sortedBuildables)
+                {
                     string cat = NormalizeCategory(data.category);
                     if (!string.Equals(_activeCategory, "All", StringComparison.Ordinal) &&
                         !string.Equals(cat, _activeCategory, StringComparison.Ordinal))
@@ -1229,8 +1375,13 @@ namespace TMBS.UI
         {
             UpdateUndoRedoInteractability();
 
-            if (buildeableTilemap != null && buildeableTilemap.IsEraseMode)
+            bool isErase = buildeableTilemap != null && buildeableTilemap.IsEraseMode;
+            if (isErase)
             {
+                _hasInspectedCell = false;
+                if (rotateButton != null) rotateButton.interactable = false;
+                if (mirrorButton != null) mirrorButton.interactable = false;
+
                 if (titleText != null) titleText.text = "ERASE MODE";
                 if (activeItemNameText != null) activeItemNameText.text = "Mode: Erase";
                 bool isPendingMode = buildeableTilemap.RootConfig != null &&
@@ -1252,9 +1403,18 @@ namespace TMBS.UI
 
             if (data == null && tile == null)
             {
+                if (rotateButton != null) rotateButton.interactable = false;
+                if (mirrorButton != null) mirrorButton.interactable = false;
+
                 if (titleText != null) titleText.text = "INSPECT MODE";
+                if (_hasInspectedCell)
+                {
+                    InspectCell(_lastInspectedCell);
+                    return;
+                }
+
                 if (activeItemNameText != null) activeItemNameText.text = "Mode: Inspect";
-                if (activeItemDetailsText != null) activeItemDetailsText.text = "Select an item from the catalog to build.";
+                if (activeItemDetailsText != null) activeItemDetailsText.text = "Hover or click a placed tile to inspect, or pick a buildable below.";
                 if (activeItemIcon != null)
                 {
                     activeItemIcon.enabled = false;
@@ -1264,12 +1424,17 @@ namespace TMBS.UI
                 return;
             }
 
+            _hasInspectedCell = false;
+            if (rotateButton != null) rotateButton.interactable = data == null || data.canRotate;
+            if (mirrorButton != null) mirrorButton.interactable = data == null || data.canMirror;
+
             if (titleText != null) titleText.text = "BUILD MODE";
 
             string displayName = data != null
-                ? (!string.IsNullOrEmpty(data.displayName) ? data.displayName : data.name)
+                ? data.GetEffectiveDisplayName()
                 : tile.name;
-            string category = data != null ? NormalizeCategory(data.category) : "Tiles";
+            string category = data != null ? data.GetEffectiveCategory() : "Tiles";
+            string sub = data != null ? data.GetEffectiveSubcategory() : string.Empty;
             int work = data != null ? data.workCost : 1;
             int res = data != null ? data.resourceCost : 0;
             Vector2Int sz = data != null ? data.GetSize() : Vector2Int.one;
@@ -1284,9 +1449,17 @@ namespace TMBS.UI
                              buildeableTilemap.RootConfig != null &&
                              buildeableTilemap.RootConfig.executionMode == ExecutionMode.Pending;
 
-            var parts = new List<string>(6);
+            var parts = new List<string>(8);
             parts.Add($"Size: {sz.x}\u00D7{sz.y}");
-            parts.Add($"Category: {category}");
+            parts.Add(string.IsNullOrEmpty(sub) ? category : $"{category} / {sub}");
+            if (data != null)
+            {
+                parts.Add(data.placementRole.ToString());
+                if (data.tier > 0)
+                    parts.Add($"T{data.tier}");
+                if (data.maxHealth > 0)
+                    parts.Add($"HP:{data.maxHealth}");
+            }
             if (!t.hideZeroCostInHud || isPending || work > 1)
                 parts.Add($"Work: {work}");
             if (!t.hideZeroCostInHud || res > 0)
@@ -1305,9 +1478,13 @@ namespace TMBS.UI
                     parts.Add("Mirrored");
             }
 
+            string summary = string.Join("  \u00B7  ", parts);
+            if (data != null && !string.IsNullOrWhiteSpace(data.description))
+                summary = $"{summary}  \u2014  {data.description.Trim()}";
+
             if (activeItemDetailsText != null)
             {
-                activeItemDetailsText.text = string.Join("  \u00B7  ", parts);
+                activeItemDetailsText.text = summary;
             }
 
             if (activeItemIcon != null)
@@ -1317,6 +1494,133 @@ namespace TMBS.UI
                 activeItemIcon.enabled = icon != null;
                 activeItemIcon.rectTransform.localEulerAngles = new Vector3(0f, 0f, -90f * rotation);
                 activeItemIcon.rectTransform.localScale = new Vector3(mirrored ? -1f : 1f, 1f, 1f);
+            }
+        }
+
+        private TmbsBuildableData GetActiveBuildableData()
+        {
+            var current = buildeableTilemap != null ? buildeableTilemap.CurrentBuildable : null;
+            return current != null ? current.ResolveData() : null;
+        }
+
+        private void OnTilemapIntentObserved(BuildIntent intent)
+        {
+            if (buildeableTilemap == null || buildeableTilemap.TargetTilemap == null)
+                return;
+
+            bool isInspecting = !buildeableTilemap.IsEraseMode &&
+                                (buildeableTilemap.CurrentBuildable == null ||
+                                 buildeableTilemap.CurrentBuildable.ResolvePrimaryTile() == null);
+            if (!isInspecting)
+                return;
+
+            if (intent.Type != BuildIntentType.PointMove && intent.Type != BuildIntentType.Confirm)
+                return;
+
+            Vector3Int cell = buildeableTilemap.TargetTilemap.WorldToCell(intent.WorldPoint);
+            if (intent.Type == BuildIntentType.PointMove && _hasInspectedCell && _lastInspectedCell == cell)
+                return;
+
+            _hasInspectedCell = true;
+            _lastInspectedCell = cell;
+            InspectCell(cell);
+        }
+
+        private void InspectCell(Vector3Int cell)
+        {
+            if (titleText != null) titleText.text = "INSPECT MODE";
+
+            if (buildeableTilemap != null && buildeableTilemap.TryGetBuildRecord(cell, out var record))
+            {
+                var data = ResolveDisplayDataFallback(record.BuildableData, record.PlacedTile);
+                string displayName = data != null
+                    ? data.GetEffectiveDisplayName()
+                    : (record.PlacedTile != null ? record.PlacedTile.name : "Placed Tile");
+
+                var parts = new List<string>(6)
+                {
+                    $"Cell ({cell.x}, {cell.y})",
+                    data != null ? data.GetEffectiveCategory() : "Tiles",
+                    $"State: {record.State}"
+                };
+
+                if (record.FootprintBounds.size.x > 1 || record.FootprintBounds.size.y > 1)
+                    parts.Add($"Footprint: {record.FootprintBounds.size.x}\u00D7{record.FootprintBounds.size.y}");
+
+                if (record.CurrentHealth > 0)
+                    parts.Add($"HP: {record.CurrentHealth}");
+
+                if (activeItemNameText != null) activeItemNameText.text = displayName;
+                if (activeItemDetailsText != null) activeItemDetailsText.text = string.Join("  \u00B7  ", parts);
+
+                if (activeItemIcon != null)
+                {
+                    Sprite icon = TmbsPaletteSlot.ResolveSprite(data, record.PlacedTile);
+                    activeItemIcon.sprite = icon;
+                    activeItemIcon.enabled = icon != null;
+                    activeItemIcon.rectTransform.localEulerAngles = Vector3.zero;
+                    activeItemIcon.rectTransform.localScale = Vector3.one;
+                }
+                return;
+            }
+
+            if (buildeableTilemap?.PendingWorkApi != null &&
+                buildeableTilemap.PendingWorkApi.TryGetCellStatus(cell, out var pendingCell))
+            {
+                var data = ResolveDisplayDataFallback(pendingCell.BuildableData, pendingCell.Tile);
+                string displayName = data != null
+                    ? data.GetEffectiveDisplayName()
+                    : (pendingCell.Tile != null ? pendingCell.Tile.name : "Pending Construction");
+
+                var parts = new List<string>(4)
+                {
+                    $"Cell ({cell.x}, {cell.y})",
+                    $"Work: {pendingCell.WorkDone}/{pendingCell.WorkRequired}"
+                };
+
+                if (pendingCell.ResourceRequired > 0)
+                    parts.Add($"Res: {pendingCell.ResourceDelivered}/{pendingCell.ResourceRequired}");
+
+                if (activeItemNameText != null) activeItemNameText.text = $"[Pending] {displayName}";
+                if (activeItemDetailsText != null) activeItemDetailsText.text = string.Join("  \u00B7  ", parts);
+
+                if (activeItemIcon != null)
+                {
+                    Sprite icon = TmbsPaletteSlot.ResolveSprite(data, pendingCell.Tile);
+                    activeItemIcon.sprite = icon;
+                    activeItemIcon.enabled = icon != null;
+                    activeItemIcon.rectTransform.localEulerAngles = Vector3.zero;
+                    activeItemIcon.rectTransform.localScale = Vector3.one;
+                }
+                return;
+            }
+
+            TileBase looseTile = buildeableTilemap != null && buildeableTilemap.TargetTilemap != null
+                ? buildeableTilemap.TargetTilemap.GetTile(cell)
+                : null;
+            if (looseTile != null)
+            {
+                if (activeItemNameText != null) activeItemNameText.text = looseTile.name;
+                if (activeItemDetailsText != null) activeItemDetailsText.text = $"Existing Tile  \u00B7  Cell ({cell.x}, {cell.y})";
+
+                if (activeItemIcon != null)
+                {
+                    Sprite icon = TmbsPaletteSlot.ResolveSprite(null, looseTile);
+                    activeItemIcon.sprite = icon;
+                    activeItemIcon.enabled = icon != null;
+                    activeItemIcon.rectTransform.localEulerAngles = Vector3.zero;
+                    activeItemIcon.rectTransform.localScale = Vector3.one;
+                }
+                return;
+            }
+
+            if (activeItemNameText != null) activeItemNameText.text = "Mode: Inspect";
+            if (activeItemDetailsText != null) activeItemDetailsText.text = $"Empty cell ({cell.x}, {cell.y})  \u00B7  Hover or click a placed tile to inspect.";
+            if (activeItemIcon != null)
+            {
+                activeItemIcon.enabled = false;
+                activeItemIcon.rectTransform.localEulerAngles = Vector3.zero;
+                activeItemIcon.rectTransform.localScale = Vector3.one;
             }
         }
 
@@ -1468,6 +1772,13 @@ namespace TMBS.UI
             if (buildeableTilemap == null)
                 return;
 
+            var activeData = GetActiveBuildableData();
+            if (activeData != null && !activeData.canRotate)
+            {
+                ShowToast("This buildable cannot be rotated.", true);
+                return;
+            }
+
             buildeableTilemap.Rotate();
             RefreshCurrentSelectionDisplay();
 
@@ -1480,6 +1791,13 @@ namespace TMBS.UI
         {
             if (buildeableTilemap == null)
                 return;
+
+            var activeData = GetActiveBuildableData();
+            if (activeData != null && !activeData.canMirror)
+            {
+                ShowToast("This buildable cannot be mirrored.", true);
+                return;
+            }
 
             buildeableTilemap.Mirror();
             RefreshCurrentSelectionDisplay();
@@ -1566,6 +1884,12 @@ namespace TMBS.UI
 
         private void HandlePaletteHotkeys()
         {
+            if (buildeableTilemap?.RootConfig?.input != null &&
+                buildeableTilemap.RootConfig.input.mode == TmbsInputMode.None)
+            {
+                return;
+            }
+
             if (IsTypingInUiInputField())
                 return;
 

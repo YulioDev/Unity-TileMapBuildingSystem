@@ -217,7 +217,7 @@ namespace TMBS.Editor.InputConfigurator
             topBar.AddToClassList("tmbs-preset-bar");
             _inputActionsBody.Add(topBar);
 
-            var presetNames = new List<string>();
+            var presetNames = new List<string> { "From Current Legacy Bindings" };
             for (int i = 0; i < TmbsInputPresets.All.Count; i++)
                 presetNames.Add(TmbsInputPresets.All[i].DisplayName);
 
@@ -629,8 +629,18 @@ namespace TMBS.Editor.InputConfigurator
             if (string.IsNullOrEmpty(savePath))
                 return;
 
-            int presetIdx = Mathf.Clamp(_genPresetDropdown.index, 0, TmbsInputPresets.All.Count - 1);
-            var template = TmbsInputPresets.All[presetIdx].CreateBindings();
+            TmbsLegacyBindings template;
+            if (_genPresetDropdown.index <= 0)
+            {
+                template = _config != null && _config.input != null
+                    ? _config.input.GetLegacyBindings().Clone()
+                    : TmbsLegacyBindings.CreateDefault();
+            }
+            else
+            {
+                int presetIdx = Mathf.Clamp(_genPresetDropdown.index - 1, 0, TmbsInputPresets.All.Count - 1);
+                template = TmbsInputPresets.All[presetIdx].CreateBindings();
+            }
 
             var generated = TmbsInputActionsGenerator.GenerateAndAssign(_config, savePath, template);
             if (generated != null)

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using TMBS.Core.Events;
+using TMBS.Core.History;
 using TMBS.Core.Metadata;
 using TMBS.Runtime.Config;
 using UnityEngine;
@@ -17,6 +18,9 @@ namespace TMBS.Core.Pending
         private readonly string _instanceId;
         private readonly bool _allowPartialCompletion;
         private readonly ResourceRequirement _resourcePolicy;
+        private readonly bool _emitPendingEvents;
+        private readonly bool _emitRegionEvents;
+        private readonly Dictionary<int, List<TileChange>> _completedChangesByOrder = new Dictionary<int, List<TileChange>>();
 
         public IPendingStore Store => _store;
 
@@ -27,7 +31,9 @@ namespace TMBS.Core.Pending
             IMetadataStore metadata,
             string instanceId,
             bool allowPartialCompletion = true,
-            ResourceRequirement resourcePolicy = ResourceRequirement.None)
+            ResourceRequirement resourcePolicy = ResourceRequirement.None,
+            bool emitPendingEvents = true,
+            bool emitRegionEvents = true)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _events = events;
@@ -36,6 +42,8 @@ namespace TMBS.Core.Pending
             _instanceId = instanceId;
             _allowPartialCompletion = allowPartialCompletion;
             _resourcePolicy = resourcePolicy;
+            _emitPendingEvents = emitPendingEvents;
+            _emitRegionEvents = emitRegionEvents;
         }
 
         public bool TryDeliverResources(Vector3Int cell, int amount)
@@ -63,7 +71,8 @@ namespace TMBS.Core.Pending
                 }
             }
 
-            _events?.Publish(new PendingChangedEvent(_instanceId, pending.Id, pending.State));
+            if (_emitPendingEvents)
+                _events?.Publish(new PendingChangedEvent(_instanceId, pending.Id, pending.State));
             return true;
         }
 
@@ -89,7 +98,8 @@ namespace TMBS.Core.Pending
             if (pending.State == PendingState.ReadyToBuild || pending.State == PendingState.WaitingForResources)
                 pending.SetState(PendingState.InProgress);
 
-            _events?.Publish(new PendingChangedEvent(_instanceId, pending.Id, pending.State));
+            if (_emitPendingEvents)
+                _events?.Publish(new PendingChangedEvent(_instanceId, pending.Id, pending.State));
 
             return true;
         }
@@ -120,18 +130,19 @@ namespace TMBS.Core.Pending
                     var c = allCells[i];
                     if (!c.IsCompleted)
                     {
-                        ApplyCompletedCell(in c);
+                        ApplyCompletedCell(pending.Id, pending.Bounds, in c);
                         pending.UpdateCell(i, c.WithCompleted());
                     }
                 }
 
                 pending.SetState(PendingState.Completed);
                 _store.Remove(pending.Id);
-                _events?.Publish(new PendingCompletedEvent(_instanceId, pending.Id, pending.Bounds));
+                if (_emitPendingEvents)
+                    _events?.Publish(new PendingCompletedEvent(_instanceId, pending.Id, pending.Bounds));
                 return true;
             }
 
-            ApplyCompletedCell(in cellData);
+            ApplyCompletedCell(pending.Id, pending.Bounds, in cellData);
             pending.UpdateCell(idx, cellData.WithCompleted());
 
             bool allDone = true;
@@ -149,9 +160,10 @@ namespace TMBS.Core.Pending
             {
                 pending.SetState(PendingState.Completed);
                 _store.Remove(pending.Id);
-                _events?.Publish(new PendingCompletedEvent(_instanceId, pending.Id, pending.Bounds));
+                if (_emitPendingEvents)
+                    _events?.Publish(new PendingCompletedEvent(_instanceId, pending.Id, pending.Bounds));
             }
-            else
+            else if (_emitPendingEvents)
             {
                 _events?.Publish(new PendingChangedEvent(_instanceId, pending.Id, pending.State));
             }
@@ -167,8 +179,56 @@ namespace TMBS.Core.Pending
             var bounds = pending.Bounds;
             pending.SetState(PendingState.Cancelled);
             _store.Remove(pendingId);
-            _events?.Publish(new PendingChangedEvent(_instanceId, pendingId, PendingState.Cancelled));
-            _events?.Publish(new PendingCompletedEvent(_instanceId, pendingId, bounds));
+            RevertCompletedOrderCells(pendingId);
+            if (_emitPendingEvents)
+            {
+                _events?.Publish(new PendingChangedEvent(_instanceId, pendingId, PendingState.Cancelled));
+                _events?.Publish(new PendingCompletedEvent(_instanceId, pendingId, bounds));
+            }
+            return true;
+        }
+
+        public bool RevertCompletedOrderCells(int orderId)
+        {
+            if (orderId <= 0 ||
+                !_completedChangesByOrder.TryGetValue(orderId, out var changes) ||
+                changes == null ||
+                changes.Count == 0)
+            {
+                return false;
+            }
+
+            _completedChangesByOrder.Remove(orderId);
+
+            for (int i = changes.Count - 1; i >= 0; i--)
+            {
+                var c = changes[i];
+                if (_targetTilemap != null)
+                {
+                    _targetTilemap.SetTile(c.Cell, c.BeforeTile);
+                    if (c.BeforeTile != null)
+                    {
+                        _targetTilemap.SetTileFlags(c.Cell, TileFlags.None);
+                        _targetTilemap.SetTransformMatrix(c.Cell, c.BeforeMatrix);
+                    }
+                    else
+                    {
+                        _targetTilemap.SetTransformMatrix(c.Cell, Matrix4x4.identity);
+                    }
+                }
+
+                if (_metadata != null)
+                {
+                    if (c.BeforeMeta.HasValue)
+                        _metadata.Set(c.BeforeMeta.Value);
+                    else
+                        _metadata.Remove(c.Cell);
+                }
+
+                if (_emitRegionEvents)
+                    _events?.Publish(new RegionModifiedEvent(_instanceId, new BoundsInt(c.Cell, Vector3Int.one)));
+            }
+
             return true;
         }
 
@@ -184,8 +244,28 @@ namespace TMBS.Core.Pending
 
         public IReadOnlyList<PendingOrder> GetAll() => _store.All;
 
-        private void ApplyCompletedCell(in PendingCell cell)
+        private void ApplyCompletedCell(int orderId, BoundsInt orderBounds, in PendingCell cell)
         {
+            TileBase beforeTile = _targetTilemap != null ? _targetTilemap.GetTile(cell.Cell) : null;
+            Matrix4x4 beforeMatrix = _targetTilemap != null ? _targetTilemap.GetTransformMatrix(cell.Cell) : Matrix4x4.identity;
+            BuildRecord? beforeMeta = null;
+            if (_metadata != null && _metadata.TryGet(cell.Cell, out var prevRec))
+                beforeMeta = prevRec;
+
+            BuildRecord? afterMeta = null;
+            if (cell.Tile != null)
+            {
+                int maxHp = cell.BuildableData != null ? cell.BuildableData.maxHealth : 0;
+                afterMeta = new BuildRecord(
+                    cell.Tile,
+                    cell.Cell,
+                    BuildState.Completed,
+                    cell.BuildableData,
+                    orderBounds.position,
+                    orderBounds,
+                    maxHp);
+            }
+
             if (_targetTilemap != null)
             {
                 _targetTilemap.SetTile(cell.Cell, cell.Tile);
@@ -202,13 +282,31 @@ namespace TMBS.Core.Pending
 
             if (_metadata != null)
             {
-                if (cell.Tile != null)
-                    _metadata.Set(new BuildRecord(cell.Tile, cell.Cell, BuildState.Completed, cell.BuildableData));
+                if (afterMeta.HasValue)
+                    _metadata.Set(afterMeta.Value);
                 else
                     _metadata.Remove(cell.Cell);
             }
 
-            _events?.Publish(new RegionModifiedEvent(_instanceId, new BoundsInt(cell.Cell, Vector3Int.one)));
+            if (orderId > 0)
+            {
+                if (!_completedChangesByOrder.TryGetValue(orderId, out var list))
+                {
+                    list = new List<TileChange>(4);
+                    _completedChangesByOrder[orderId] = list;
+                }
+                list.Add(new TileChange(
+                    cell.Cell,
+                    beforeTile,
+                    cell.Tile,
+                    beforeMeta,
+                    afterMeta,
+                    beforeMatrix,
+                    cell.Tile != null ? cell.TransformMatrix : Matrix4x4.identity));
+            }
+
+            if (_emitRegionEvents)
+                _events?.Publish(new RegionModifiedEvent(_instanceId, new BoundsInt(cell.Cell, Vector3Int.one)));
         }
 
         private static bool AllCellsReadyForWork(PendingOrder pending)

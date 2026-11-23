@@ -9,11 +9,14 @@ namespace TMBS.Core.Validation
     {
         [NonSerialized] private IPendingStore _store;
 
+        public bool AllowReplaceExisting { get; set; }
+
         public void InjectStore(IPendingStore store) => _store = store;
 
         public ValidationResult Validate(in PipelineContext ctx, ValidationMode mode)
         {
-            if (_store == null || ctx.AlternateBehaviour) return ValidationResult.Valid;
+            if (_store == null || ctx.AlternateBehaviour || AllowReplaceExisting)
+                return ValidationResult.Valid;
 
             var opBounds = ValidationUtil.GetOperationBounds(in ctx);
             int len = opBounds.size.x * opBounds.size.y * opBounds.size.z;
@@ -41,7 +44,8 @@ namespace TMBS.Core.Validation
             for (int i = 0; i < len; i++)
                 if (write.Bits[i]) { anyFree = true; break; }
 
-            if (!anyFree)
+            bool isBlueprint = ctx.BuildableData != null && ctx.BuildableData.isBlueprint && !ctx.AlternateBehaviour;
+            if (isBlueprint || !anyFree)
                 return ValidationResult.InvalidWith(ValidationFailure.Occupied, fb, write);
 
             return ValidationResult.ValidWith(fb, write);

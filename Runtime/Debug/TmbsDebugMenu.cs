@@ -286,6 +286,9 @@ namespace TMBS.Runtime.Debugging
 
         private void TickAutoWorker()
         {
+            if (_pauseSimulation || Time.timeScale <= 0f)
+                return;
+
             _tickerTimer += Time.unscaledDeltaTime;
             if (_tickerTimer < _tickerInterval)
                 return;
@@ -297,6 +300,9 @@ namespace TMBS.Runtime.Debugging
             if (workApi == null) return;
 
             var policy = GetResourcePolicy();
+            var rootPendingDebug = buildeableTilemap.RootConfig != null
+                ? buildeableTilemap.RootConfig.GetPendingDebugConfig()
+                : null;
 
             if (_autoWorkerConfig == null)
             {
@@ -305,7 +311,8 @@ namespace TMBS.Runtime.Debugging
 
             _autoWorkerConfig.enabled = true;
             _autoWorkerConfig.workPerStep = Mathf.Max(1, _manualWorkAmount);
-            _autoWorkerConfig.cellsPerStep = 1;
+            _autoWorkerConfig.cellsPerStep = rootPendingDebug != null ? Mathf.Max(1, rootPendingDebug.cellsPerStep) : 1;
+            _autoWorkerConfig.buildOrder = rootPendingDebug != null ? rootPendingDebug.buildOrder : PendingDebugBuildOrder.ByStoreOrder;
             _autoWorkerConfig.autoDeliverResources = _tickerDeliverResources;
 
             if (_autoWorkerBuilder == null ||
@@ -642,11 +649,11 @@ namespace TMBS.Runtime.Debugging
             {
                 AdvanceAllWork(1);
             }
-            if (GUILayout.Button($"+{_manualWorkAmount} Work", GUILayout.Height(24)))
+            if (_manualWorkAmount != 1 && GUILayout.Button($"+{_manualWorkAmount} Work", GUILayout.Height(24)))
             {
                 AdvanceAllWork(_manualWorkAmount);
             }
-            if (GUILayout.Button("Deliver Resources", GUILayout.Height(24)))
+            if (GUILayout.Button($"+{_manualResourceAmount} Resources", GUILayout.Height(24)))
             {
                 DeliverAllNeededResources();
             }
@@ -686,12 +693,26 @@ namespace TMBS.Runtime.Debugging
             if (_autoTickerEnabled)
             {
                 GUILayout.BeginHorizontal();
-                GUILayout.Label($"Interval: {_tickerInterval:F2}s", GUILayout.Width(110));
+                GUILayout.Label($"Interval: {_tickerInterval:F2}s", GUILayout.Width(100));
                 _tickerInterval = GUILayout.HorizontalSlider(_tickerInterval, 0.05f, 1.0f);
-                GUILayout.Space(12);
-                GUILayout.Label($"Work/Tick: {_manualWorkAmount}", GUILayout.Width(110));
                 GUILayout.EndHorizontal();
             }
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label($"Work: {_manualWorkAmount}", GUILayout.Width(68));
+            if (GUILayout.Button("-", GUILayout.Width(24)))
+                _manualWorkAmount = Mathf.Max(1, _manualWorkAmount - 1);
+            if (GUILayout.Button("+", GUILayout.Width(24)))
+                _manualWorkAmount++;
+
+            GUILayout.Space(12);
+            GUILayout.Label($"Res: {_manualResourceAmount}", GUILayout.Width(64));
+            if (GUILayout.Button("-", GUILayout.Width(24)))
+                _manualResourceAmount = Mathf.Max(1, _manualResourceAmount - 1);
+            if (GUILayout.Button("+", GUILayout.Width(24)))
+                _manualResourceAmount++;
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
 
             GUILayout.EndVertical();
         }

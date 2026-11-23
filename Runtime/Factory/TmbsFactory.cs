@@ -62,6 +62,9 @@ namespace TMBS.Runtime.Interface
             PendingDebugBuilder pendingDebugBuilder = null;
             BoundsInt? globalBounds = null;
 
+            bool allowReplacePending = config.executionMode == ExecutionMode.Pending &&
+                                       config.GetPendingConfig().replaceExistingPending;
+
             switch (config.executionMode)
             {
                 case ExecutionMode.Pending:
@@ -69,10 +72,13 @@ namespace TMBS.Runtime.Interface
                     var pendingConfig = config.GetPendingConfig();
                     pendingStore = new PendingStore();
                     router = new PendingBuildRouter();
-                    executor = new PendingBuildExecutor(pendingStore, events, pendingConfig, history);
+                    var pendingExecutor = new PendingBuildExecutor(pendingStore, events, pendingConfig, history);
                     pendingWorkApi = new PendingWorkApi(
                         pendingStore, events, targetTilemap, metadata, instanceId,
-                        pendingConfig.allowPartialCompletion, pendingConfig.resourcePolicy);
+                        pendingConfig.allowPartialCompletion, pendingConfig.resourcePolicy,
+                        pendingConfig.emitPendingEvents, historyConfig.emitRegionEvents);
+                    pendingExecutor.InjectWorkApi(pendingWorkApi);
+                    executor = pendingExecutor;
 
                     var debugConfig = config.GetPendingDebugConfig();
                     pendingDebugBuilder = debugConfig.enabled
@@ -113,7 +119,7 @@ namespace TMBS.Runtime.Interface
                         globalBounds = bv.allowedBounds;
                     }
 
-                    InjectValidatorDependencies(v, metadata, occupancySource, pendingStore);
+                    InjectValidatorDependencies(v, metadata, occupancySource, pendingStore, allowReplacePending);
 
                     validators.Add(v);
                 }
@@ -125,7 +131,7 @@ namespace TMBS.Runtime.Interface
                 {
                     if (sceneValidators[i] is IValidator validator)
                     {
-                        InjectValidatorDependencies(validator, metadata, occupancySource, pendingStore);
+                        InjectValidatorDependencies(validator, metadata, occupancySource, pendingStore, allowReplacePending);
 
                         validators.Add(validator);
                     }
@@ -166,7 +172,8 @@ namespace TMBS.Runtime.Interface
             IValidator validator,
             IMetadataStore metadata,
             ICellOccupancySource occupancySource,
-            IPendingStore pendingStore)
+            IPendingStore pendingStore,
+            bool allowReplacePending)
         {
             if (validator is IMetadataConsumer injectable)
                 injectable.Inject(metadata);
@@ -176,6 +183,9 @@ namespace TMBS.Runtime.Interface
 
             if (pendingStore != null && validator is IPendingStoreConsumer storeConsumer)
                 storeConsumer.InjectStore(pendingStore);
+
+            if (validator is PendingOccupancyValidator pendingValidator)
+                pendingValidator.AllowReplaceExisting = allowReplacePending;
         }
     }
 }

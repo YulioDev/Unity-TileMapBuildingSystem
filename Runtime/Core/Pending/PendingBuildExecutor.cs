@@ -16,18 +16,23 @@ namespace TMBS.Core.Pending
         private readonly IEventBus _events;
         private readonly TmbsPendingConfig _config;
         private readonly IUndoRedoHistory _history;
+        private IPendingWorkApi _workApi;
 
         public PendingBuildExecutor(
             IPendingStore store,
             IEventBus events,
             TmbsPendingConfig config,
-            IUndoRedoHistory history = null)
+            IUndoRedoHistory history = null,
+            IPendingWorkApi workApi = null)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _events = events;
             _config = config ?? new TmbsPendingConfig();
             _history = history;
+            _workApi = workApi;
         }
+
+        public void InjectWorkApi(IPendingWorkApi workApi) => _workApi = workApi;
 
         public void Execute(in PipelineContext ctx, Tilemap targetTilemap)
         {
@@ -95,7 +100,8 @@ namespace TMBS.Core.Pending
                 orderDefs,
                 _config.emitPendingEvents,
                 _config.replaceExistingPending,
-                cancelOrderIds);
+                cancelOrderIds,
+                _workApi);
 
             if (_history != null)
             {
@@ -116,9 +122,9 @@ namespace TMBS.Core.Pending
             {
                 if (!writeMask.Bits[i]) continue;
                 var cell = writeMask.CellAt(i);
-                var cellData = CreatePendingCell(in ctx, cell, out int resCost);
-
                 var cellBounds = new BoundsInt(cell, Vector3Int.one);
+                var cellData = CreatePendingCell(in ctx, cellBounds, cell, out int resCost);
+
                 list.Add((cellBounds, new[] { cellData }, ResolveInitialState(resCost)));
             }
 
@@ -142,7 +148,7 @@ namespace TMBS.Core.Pending
             {
                 if (!writeMask.Bits[i]) continue;
                 var cell = writeMask.CellAt(i);
-                cells[w++] = CreatePendingCell(in ctx, cell, out int resCost);
+                cells[w++] = CreatePendingCell(in ctx, bounds, cell, out int resCost);
                 totalResCost += resCost;
             }
 
@@ -152,12 +158,16 @@ namespace TMBS.Core.Pending
             };
         }
 
-        private PendingCell CreatePendingCell(in PipelineContext ctx, Vector3Int cell, out int resourceCost)
+        private PendingCell CreatePendingCell(in PipelineContext ctx, BoundsInt bounds, Vector3Int cell, out int resourceCost)
         {
             resourceCost = ResolveResourceCost(ctx, cell);
+            TileBase tile = !ctx.AlternateBehaviour && ctx.BuildableData != null && ctx.BuildableData.isBlueprint
+                ? (ctx.BuildableData.GetTileAtLocalOffset(cell.x - bounds.xMin, cell.y - bounds.yMin) ?? ctx.Decision.WriteTile)
+                : ctx.Decision.WriteTile;
+
             return new PendingCell(
                 cell,
-                ctx.Decision.WriteTile,
+                tile,
                 ctx.BuildableData,
                 ResolveWorkCost(ctx, cell),
                 0,
@@ -169,21 +179,25 @@ namespace TMBS.Core.Pending
 
         private int ResolveWorkCost(in PipelineContext ctx, Vector3Int cell)
         {
+            if (_config.costMode == PendingCostMode.FixedPerCell)
+                return Mathf.Max(1, _config.workCost);
+
             var data = ctx.BuildableData;
-            if (data == null) return _config.workCost;
-            return _config.costMode == PendingCostMode.DefinitionProvider
-                ? data.GetWorkCost(cell)
-                : data.workCost;
+            return data != null
+                ? Mathf.Max(1, data.GetWorkCost(cell))
+                : Mathf.Max(1, _config.workCost);
         }
 
         private int ResolveResourceCost(in PipelineContext ctx, Vector3Int cell)
         {
             if (ctx.AlternateBehaviour || _config.resourcePolicy == ResourceRequirement.None) return 0;
+            if (_config.costMode == PendingCostMode.FixedPerCell)
+                return Mathf.Max(0, _config.resourceCost);
+
             var data = ctx.BuildableData;
-            if (data == null) return _config.resourceCost;
-            return _config.costMode == PendingCostMode.DefinitionProvider
-                ? data.GetResourceCost(cell)
-                : data.resourceCost;
+            return data != null
+                ? Mathf.Max(0, data.GetResourceCost(cell))
+                : Mathf.Max(0, _config.resourceCost);
         }
 
         private PendingState ResolveInitialState(int resourceCost = 1)

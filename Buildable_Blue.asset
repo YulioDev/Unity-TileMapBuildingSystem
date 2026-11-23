@@ -13,10 +13,21 @@ MonoBehaviour:
   m_Name: Buildable_Blue
   m_EditorClassIdentifier: Assembly-CSharp::TMBS.Runtime.Config.TmbsBuildableData
   id: tile_blue
-  displayName: "Blue Block"
-  category: "Blocks"
+  displayName: Blue Block
+  description: 
+  category: General
+  subcategory: Nature
+  placementRole: 0
+  tier: 0
+  sortOrder: 0
+  tags: []
   tile: {fileID: 11400000, guid: 180f55a6f11b7d54e828326e9f02054a, type: 2}
   previewSprite: {fileID: 1752780898486463412, guid: 83b3aa3349505d9439be9aa1504fbeab, type: 3}
   workCost: 1
   resourceCost: 0
   isBlueprint: 0
+  footprintSize: {x: 1, y: 1}
+  maxHealth: 0
+  canRotate: 1
+  canMirror: 0
+  blocksMovement: 1

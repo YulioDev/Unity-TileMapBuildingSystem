@@ -43,11 +43,11 @@ namespace TMBS.Editor
             var canvas = canvasObj.GetComponent<Canvas>() ?? canvasObj.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 100;
-            canvas.pixelPerfect = false;
+            canvas.pixelPerfect = true;
 
             var scaler = canvasObj.GetComponent<CanvasScaler>() ?? canvasObj.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.referenceResolution = new Vector2(1280f, 720f);
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
             scaler.matchWidthOrHeight = 0.5f;
             scaler.referencePixelsPerUnit = 64f;
@@ -809,7 +809,7 @@ namespace TMBS.Editor
             var txt = obj.GetComponent<Text>();
             txt.text = content;
             txt.fontSize = fontSize;
-            txt.resizeTextForBestFit = true;
+            txt.resizeTextForBestFit = false;
             txt.resizeTextMinSize = minSize;
             txt.resizeTextMaxSize = maxSize;
             txt.fontStyle = style;
@@ -830,8 +830,8 @@ namespace TMBS.Editor
         {
             var btn = CreateButton(name, parent, label, Vector2.zero, Vector2.one, btnColor, outlineColor, font);
             var layoutElem = btn.gameObject.AddComponent<LayoutElement>();
-            layoutElem.minWidth = 74f;
-            layoutElem.preferredWidth = 104f;
+            layoutElem.minWidth = 82f;
+            layoutElem.preferredWidth = 110f;
             return btn;
         }
 
@@ -859,7 +859,7 @@ namespace TMBS.Editor
             btn.targetGraphic = img;
             ApplyNormalizedButtonColors(btn);
 
-            CreateText("Label", obj.transform, label, 13, 9, 14, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, Vector2.one, Vector2.zero, font);
+            CreateText("Label", obj.transform, label, 12, 10, 13, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, Vector2.one, Vector2.zero, font);
             return btn;
         }
 

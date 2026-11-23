@@ -87,7 +87,9 @@ namespace TMBS.Unity.Input
             hasDrag: _bindings.place.IsBound,
             hasUndo: _bindings.undo.IsBound,
             hasRedo: _bindings.redo.IsBound,
-            hasAlternateModifier: _bindings.eraseModifier.IsBound);
+            hasAlternateModifier: _bindings.eraseModifier.IsBound,
+            hasRotate: _bindings.rotate.IsBound,
+            hasMirror: _bindings.mirror.IsBound);
 
         public event Action<BuildIntent> BuildIntentRaised;
 

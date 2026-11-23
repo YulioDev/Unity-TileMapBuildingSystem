@@ -9,6 +9,7 @@ namespace TMBS.Core.Pending
         bool TryAddWork(Vector3Int cell, int amount);
         bool TryCompleteCell(Vector3Int cell);
         bool TryCancel(int pendingId);
+        bool RevertCompletedOrderCells(int orderId);
         bool TryGetCellStatus(Vector3Int cell, out PendingCell status);
         IReadOnlyList<PendingOrder> GetAll();
     }
