@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using TMBS.Runtime.Config;
+using TMBS.Runtime.Debugging;
 using TMBS.Runtime.Interface;
 using TMBS.UI;
+using TMBS.Unity.Agents;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -880,6 +882,42 @@ namespace TMBS.Editor
             {
                 prop.objectReferenceValue = value;
             }
+        }
+
+        [MenuItem("Tools/TMBS/4. Setup Build Agents & Visual Debug", false, 103)]
+        public static void SetupBuildAgentsAndVisualDebug()
+        {
+            var buildeable = UnityEngine.Object.FindAnyObjectByType<BuildeableTilemap>();
+            if (buildeable == null)
+            {
+                Debug.LogWarning("TMBS: No 'BuildeableTilemap' found in the active scene.");
+                return;
+            }
+
+            GameObject host = buildeable.gameObject;
+
+            var agentManager = host.GetComponent<TmbsBuildAgentManager>();
+            if (agentManager == null)
+                agentManager = Undo.AddComponent<TmbsBuildAgentManager>(host);
+
+            var managerSo = new SerializedObject(agentManager);
+            SetObjectProperty(managerSo, "buildeableTilemap", buildeable);
+            managerSo.ApplyModifiedPropertiesWithoutUndo();
+
+            var visualDebugger = host.GetComponent<TmbsPendingVisualDebugger>();
+            if (visualDebugger == null)
+                visualDebugger = Undo.AddComponent<TmbsPendingVisualDebugger>(host);
+
+            var debuggerSo = new SerializedObject(visualDebugger);
+            SetObjectProperty(debuggerSo, "buildeableTilemap", buildeable);
+            SetObjectProperty(debuggerSo, "agentManager", agentManager);
+            debuggerSo.ApplyModifiedPropertiesWithoutUndo();
+
+            if (!Application.isPlaying && host.scene.IsValid())
+                EditorSceneManager.MarkSceneDirty(host.scene);
+
+            Selection.activeGameObject = host;
+            Debug.Log($"TMBS: Configured TmbsBuildAgentManager & TmbsPendingVisualDebugger on '{host.name}'.", host);
         }
     }
 }

@@ -116,6 +116,15 @@ namespace TMBS.Runtime.Config
             if (input == null)
                 input = new TmbsInputConfig();
 
+            if (pending == null)
+                pending = new TmbsPendingConfig();
+
+            if (pendingDebug == null)
+                pendingDebug = new TmbsPendingDebugConfig();
+
+            if (pendingDebug.visualDebug == null)
+                pendingDebug.visualDebug = new TmbsPendingVisualDebugConfig();
+
             if (debugMenu == null)
                 debugMenu = new TmbsDebugMenuConfig();
 

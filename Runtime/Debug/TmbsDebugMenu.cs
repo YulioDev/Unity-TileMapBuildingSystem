@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
+using TMBS.Core.Agents;
 using TMBS.Core.Pending;
 using TMBS.Runtime.Config;
 using TMBS.Runtime.Interface;
+using TMBS.Unity.Agents;
 using UnityEngine;
+using UnityEngine.Tilemaps;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
@@ -22,9 +25,23 @@ namespace TMBS.Runtime.Debugging
         [SerializeField] private bool isOpen = false;
 
         private const int WindowId = 1001;
-        private Rect _windowRect = new Rect(24, 24, 520, 680);
+        private Rect _windowRect = new Rect(24, 24, 540, 720);
+        private Vector2 _windowScrollPos;
         private Vector2 _scrollPos;
         private bool _isStylesInitialized;
+        private bool _showVisualDebugFoldout = true;
+        private bool _showAgentsFoldout = true;
+        private bool _showLegacyAutoWorker = false;
+
+        private TmbsBuildAgentManager _agentManager;
+        private TmbsPendingVisualDebugger _visualDebugger;
+
+        // Deferred IMGUI mutations so Layout and MouseUp/Repaint always see identical control counts
+        private int _pendingSpawnCount;
+        private bool _pendingDespawnLast;
+        private bool _pendingClearAll;
+        private GameObject _pendingDespawnTarget;
+        private bool _pendingAttachVisualDebugger;
 
         // Auto-ticker state
         private bool _autoTickerEnabled = false;
@@ -110,6 +127,7 @@ namespace TMBS.Runtime.Debugging
         {
             TMBS.Unity.Input.UiFocusGuard.IsPointerBlockedByOverlay = () => IsPointerOverAnyMenu;
             ResolveBuildeableTilemap();
+            ResolveSupportComponents();
             SyncWithConfig();
         }
 
@@ -117,7 +135,82 @@ namespace TMBS.Runtime.Debugging
         {
             TMBS.Unity.Input.UiFocusGuard.IsPointerBlockedByOverlay = () => IsPointerOverAnyMenu;
             ResolveBuildeableTilemap();
+            ResolveSupportComponents();
             SyncWithConfig();
+        }
+
+        private void ResolveSupportComponents()
+        {
+            if (_agentManager == null)
+            {
+                if (buildeableTilemap != null)
+                    _agentManager = buildeableTilemap.GetComponent<TmbsBuildAgentManager>();
+                if (_agentManager == null)
+                    _agentManager = GetComponent<TmbsBuildAgentManager>();
+                if (_agentManager == null)
+                {
+#if UNITY_2023_1_OR_NEWER
+                    _agentManager = FindAnyObjectByType<TmbsBuildAgentManager>();
+#else
+                    _agentManager = FindObjectOfType<TmbsBuildAgentManager>();
+#endif
+                }
+            }
+
+            if (_visualDebugger == null)
+            {
+                if (buildeableTilemap != null)
+                    _visualDebugger = buildeableTilemap.GetComponent<TmbsPendingVisualDebugger>();
+                if (_visualDebugger == null)
+                    _visualDebugger = GetComponent<TmbsPendingVisualDebugger>();
+                if (_visualDebugger == null)
+                {
+#if UNITY_2023_1_OR_NEWER
+                    _visualDebugger = FindAnyObjectByType<TmbsPendingVisualDebugger>();
+#else
+                    _visualDebugger = FindObjectOfType<TmbsPendingVisualDebugger>();
+#endif
+                }
+            }
+        }
+
+        private TmbsBuildAgentManager EnsureAgentManager()
+        {
+            ResolveBuildeableTilemap();
+            ResolveSupportComponents();
+
+            if (_agentManager != null)
+            {
+                if (buildeableTilemap != null && _agentManager.BuildeableTilemap == null)
+                    _agentManager.BuildeableTilemap = buildeableTilemap;
+                return _agentManager;
+            }
+
+            GameObject host = buildeableTilemap != null ? buildeableTilemap.gameObject : gameObject;
+            _agentManager = host.AddComponent<TmbsBuildAgentManager>();
+            _agentManager.BuildeableTilemap = buildeableTilemap;
+            return _agentManager;
+        }
+
+        private TmbsPendingVisualDebugger EnsureVisualDebugger()
+        {
+            ResolveBuildeableTilemap();
+            ResolveSupportComponents();
+
+            if (_visualDebugger != null)
+            {
+                if (buildeableTilemap != null && _visualDebugger.TargetBuildeableTilemap == null)
+                    _visualDebugger.TargetBuildeableTilemap = buildeableTilemap;
+                if (_agentManager != null && _visualDebugger.AgentManager == null)
+                    _visualDebugger.AgentManager = _agentManager;
+                return _visualDebugger;
+            }
+
+            GameObject host = buildeableTilemap != null ? buildeableTilemap.gameObject : gameObject;
+            _visualDebugger = host.AddComponent<TmbsPendingVisualDebugger>();
+            _visualDebugger.TargetBuildeableTilemap = buildeableTilemap;
+            _visualDebugger.AgentManager = _agentManager;
+            return _visualDebugger;
         }
 
         private void ResolveBuildeableTilemap()
@@ -339,8 +432,8 @@ namespace TMBS.Runtime.Debugging
             InitStyles();
 
             // Responsive sizing based on screen resolution
-            float maxW = Mathf.Min(520f, Mathf.Max(320f, Screen.width - 24f));
-            float maxH = Mathf.Min(680f, Mathf.Max(240f, Screen.height - 24f));
+            float maxW = Mathf.Min(540f, Mathf.Max(320f, Screen.width - 24f));
+            float maxH = Mathf.Min(740f, Mathf.Max(240f, Screen.height - 24f));
             _windowRect.width = maxW;
             _windowRect.height = maxH;
 
@@ -359,6 +452,48 @@ namespace TMBS.Runtime.Debugging
             _windowRect = GUI.Window(WindowId, _windowRect, DrawWindowContent, "TMBS Debug Menu & Pending Controller");
 
             GUI.backgroundColor = prevBg;
+
+            ProcessDeferredAgentActions();
+        }
+
+        private void ProcessDeferredAgentActions()
+        {
+            if (_pendingAttachVisualDebugger)
+            {
+                _pendingAttachVisualDebugger = false;
+                var dbg = EnsureVisualDebugger();
+                dbg.ActiveConfig.enabled = true;
+            }
+
+            if (_pendingClearAll)
+            {
+                _pendingClearAll = false;
+                _agentManager?.DespawnAllAgents();
+            }
+
+            if (_pendingDespawnLast)
+            {
+                _pendingDespawnLast = false;
+                _agentManager?.DespawnLastAgent();
+            }
+
+            if (_pendingDespawnTarget != null)
+            {
+                GameObject target = _pendingDespawnTarget;
+                _pendingDespawnTarget = null;
+                _agentManager?.DespawnAgent(target);
+            }
+
+            if (_pendingSpawnCount > 0)
+            {
+                int count = _pendingSpawnCount;
+                _pendingSpawnCount = 0;
+                var mgr = EnsureAgentManager();
+                if (count == 1)
+                    mgr.SpawnAgent(GetCameraSpawnWorldPosition());
+                else
+                    mgr.SpawnAgents(count, GetCameraSpawnWorldPosition(), 2.0f);
+            }
         }
 
         private void InitStyles()
@@ -483,6 +618,16 @@ namespace TMBS.Runtime.Debugging
 
             GUILayout.Space(6);
 
+            _windowScrollPos = GUILayout.BeginScrollView(_windowScrollPos);
+
+            DrawAgentsSection();
+
+            GUILayout.Space(6);
+
+            DrawVisualDebugSection();
+
+            GUILayout.Space(6);
+
             DrawMetricsSection();
 
             GUILayout.Space(6);
@@ -497,9 +642,219 @@ namespace TMBS.Runtime.Debugging
 
             DrawOrdersInspectorSection();
 
+            GUILayout.EndScrollView();
+
             // Allow dragging from anywhere on header label area without blocking top-right controls
             float dragWidth = Mathf.Max(60f, _windowRect.width - 110f);
             GUI.DragWindow(new Rect(0, 0, dragWidth, 30));
+        }
+
+        private void DrawAgentsSection()
+        {
+            ResolveSupportComponents();
+
+            GUILayout.BeginVertical(GUI.skin.box);
+            GUILayout.BeginHorizontal();
+            int agentCount = _agentManager != null ? _agentManager.AgentCount : 0;
+            _showAgentsFoldout = GUILayout.Toggle(_showAgentsFoldout, $"Builder Agents ({agentCount})", _subHeaderStyle);
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+
+            if (_showAgentsFoldout)
+            {
+                GUILayout.BeginHorizontal();
+                var origBg = GUI.backgroundColor;
+                GUI.backgroundColor = new Color(0.25f, 0.72f, 0.95f);
+                if (GUILayout.Button("Spawn Agent", GUILayout.Height(22)))
+                {
+                    _pendingSpawnCount += 1;
+                }
+                if (GUILayout.Button("Spawn +3", GUILayout.Height(22)))
+                {
+                    _pendingSpawnCount += 3;
+                }
+                GUI.backgroundColor = origBg;
+
+                GUI.enabled = agentCount > 0;
+                if (GUILayout.Button("Despawn Last", GUILayout.Height(22)))
+                {
+                    _pendingDespawnLast = true;
+                }
+                if (GUILayout.Button("Clear All", GUILayout.Height(22)))
+                {
+                    _pendingClearAll = true;
+                }
+                GUI.enabled = true;
+                GUILayout.EndHorizontal();
+
+                if (_agentManager != null)
+                {
+                    bool changed = false;
+                    GUILayout.BeginHorizontal();
+
+                    bool nextPathfinding = GUILayout.Toggle(_agentManager.UseBuiltInPathfinding, "A* Pathfinding");
+                    if (nextPathfinding != _agentManager.UseBuiltInPathfinding)
+                    {
+                        _agentManager.UseBuiltInPathfinding = nextPathfinding;
+                        changed = true;
+                    }
+
+                    bool nextDiag = GUILayout.Toggle(_agentManager.AllowDiagonalMovement, "Diagonal");
+                    if (nextDiag != _agentManager.AllowDiagonalMovement)
+                    {
+                        _agentManager.AllowDiagonalMovement = nextDiag;
+                        changed = true;
+                    }
+
+                    bool nextDeliver = GUILayout.Toggle(_agentManager.DefaultAutoDeliverResources, "Auto-Deliver Res");
+                    if (nextDeliver != _agentManager.DefaultAutoDeliverResources)
+                    {
+                        _agentManager.DefaultAutoDeliverResources = nextDeliver;
+                        changed = true;
+                    }
+
+                    if (GUILayout.Button($"Order: {_agentManager.DefaultTargetStrategy}", GUILayout.Height(20), GUILayout.Width(165)))
+                    {
+                        int nextEnum = ((int)_agentManager.DefaultTargetStrategy + 1) % 3;
+                        _agentManager.DefaultTargetStrategy = (TmbsAgentTargetStrategy)nextEnum;
+                        changed = true;
+                    }
+
+                    GUILayout.EndHorizontal();
+
+                    if (changed)
+                    {
+                        _agentManager.ApplySettingsToActiveAgents();
+                    }
+
+                    var activeAgents = _agentManager.ActiveAgents;
+                    if (activeAgents != null && activeAgents.Count > 0)
+                    {
+                        for (int i = 0; i < activeAgents.Count; i++)
+                        {
+                            var agent = activeAgents[i];
+                            if (agent == null)
+                                continue;
+
+                            GUILayout.BeginHorizontal();
+                            GUILayout.Label(agent.gameObject.name, _metricValueStyle, GUILayout.Width(135));
+                            GUILayout.Label(agent.State.ToString(), _metricLabelStyle, GUILayout.Width(130));
+                            string targetText = agent.HasActiveJob
+                                ? $"({agent.CurrentJob.TargetCell.x}, {agent.CurrentJob.TargetCell.y})"
+                                : "-";
+                            GUILayout.Label($"Target: {targetText}", _metricLabelStyle);
+                            GUILayout.FlexibleSpace();
+                            if (GUILayout.Button("X", GUILayout.Width(24), GUILayout.Height(18)))
+                            {
+                                _pendingDespawnTarget = agent.gameObject;
+                            }
+                            GUILayout.EndHorizontal();
+                        }
+                    }
+                }
+                else
+                {
+                    GUILayout.Label("No TmbsBuildAgentManager active yet. Click 'Spawn Agent' to create one.", _metricLabelStyle);
+                }
+            }
+
+            GUILayout.EndVertical();
+        }
+
+        private void DrawVisualDebugSection()
+        {
+            ResolveSupportComponents();
+
+            TmbsPendingVisualDebugConfig visualCfg = null;
+            if (buildeableTilemap != null && buildeableTilemap.RootConfig != null)
+                visualCfg = buildeableTilemap.RootConfig.GetPendingDebugConfig().GetVisualDebugConfig();
+            else if (_visualDebugger != null)
+                visualCfg = _visualDebugger.ActiveConfig;
+
+            GUILayout.BeginVertical(GUI.skin.box);
+            GUILayout.BeginHorizontal();
+            _showVisualDebugFoldout = GUILayout.Toggle(_showVisualDebugFoldout, "Visual Pending Debug", _subHeaderStyle);
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+
+            if (_showVisualDebugFoldout)
+            {
+                if (visualCfg == null)
+                {
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label("No RootConfig visual profile found.", _metricLabelStyle);
+                    if (GUILayout.Button("Attach Visual Debugger", GUILayout.Height(20), GUILayout.Width(160)))
+                    {
+                        _pendingAttachVisualDebugger = true;
+                    }
+                    GUILayout.EndHorizontal();
+                }
+                else
+                {
+                    bool prevMaster = visualCfg.enabled;
+                    bool nextMaster = GUILayout.Toggle(prevMaster, "Enable Pending Visual Overlays (Scene + Game View)");
+                    if (nextMaster != prevMaster)
+                    {
+                        visualCfg.enabled = nextMaster;
+                        if (nextMaster)
+                            _pendingAttachVisualDebugger = true;
+                    }
+
+                    GUI.enabled = visualCfg.enabled;
+                    GUILayout.BeginHorizontal();
+                    visualCfg.showInGameView = GUILayout.Toggle(visualCfg.showInGameView, "Game View");
+                    visualCfg.showInSceneView = GUILayout.Toggle(visualCfg.showInSceneView, "Scene Gizmos");
+                    visualCfg.showStateOutlines = GUILayout.Toggle(visualCfg.showStateOutlines, "Outlines");
+                    visualCfg.showProgressBars = GUILayout.Toggle(visualCfg.showProgressBars, "Progress Bars");
+                    GUILayout.EndHorizontal();
+
+                    GUILayout.BeginHorizontal();
+                    visualCfg.showCellLabels = GUILayout.Toggle(visualCfg.showCellLabels, "Cell Labels");
+                    visualCfg.showAgentPaths = GUILayout.Toggle(visualCfg.showAgentPaths, "Agent Paths");
+                    visualCfg.showAgentTargets = GUILayout.Toggle(visualCfg.showAgentTargets, "Agent Targets");
+                    visualCfg.showWalkabilityOverlay = GUILayout.Toggle(visualCfg.showWalkabilityOverlay, "Walkability");
+                    GUILayout.EndHorizontal();
+                    GUI.enabled = true;
+                }
+            }
+
+            GUILayout.EndVertical();
+        }
+
+        private Vector3 GetCameraSpawnWorldPosition()
+        {
+            Tilemap tilemap = buildeableTilemap != null ? buildeableTilemap.TargetTilemap : null;
+            Camera cam = buildeableTilemap != null ? buildeableTilemap.ResolvedCamera : Camera.main;
+            if (cam == null)
+                cam = Camera.main;
+
+            Vector3 worldPos = tilemap != null ? tilemap.transform.position : Vector3.zero;
+            if (cam != null)
+            {
+                Plane plane = tilemap != null
+                    ? new Plane(tilemap.transform.forward, tilemap.transform.position)
+                    : new Plane(Vector3.back, Vector3.zero);
+                Ray ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+                if (plane.Raycast(ray, out float enter))
+                    worldPos = ray.GetPoint(enter);
+                else
+                    worldPos = new Vector3(cam.transform.position.x, cam.transform.position.y, worldPos.z);
+            }
+
+            if (tilemap != null && _agentManager != null)
+            {
+                Vector3Int cell = tilemap.WorldToCell(worldPos);
+                if (_agentManager.TryFindNearestWalkableCell(cell, out var walkableCell))
+                    worldPos = tilemap.GetCellCenterWorld(walkableCell);
+                else
+                    worldPos = tilemap.GetCellCenterWorld(cell);
+            }
+            else if (tilemap != null)
+            {
+                worldPos = tilemap.GetCellCenterWorld(tilemap.WorldToCell(worldPos));
+            }
+
+            return worldPos;
         }
 
         private void DrawModeSection()
@@ -685,6 +1040,13 @@ namespace TMBS.Runtime.Debugging
         private void DrawAutoTickerSection()
         {
             GUILayout.BeginVertical(GUI.skin.box);
+            _showLegacyAutoWorker = GUILayout.Toggle(_showLegacyAutoWorker, "Legacy Auto-Step Debug (Automatic, No Agents)", _subHeaderStyle);
+            if (!_showLegacyAutoWorker)
+            {
+                GUILayout.EndVertical();
+                return;
+            }
+
             GUILayout.BeginHorizontal();
             _autoTickerEnabled = GUILayout.Toggle(_autoTickerEnabled, "Auto-Step Worker", GUILayout.Width(180));
             _tickerDeliverResources = GUILayout.Toggle(_tickerDeliverResources, "Auto-Deliver Resources");
@@ -750,7 +1112,7 @@ namespace TMBS.Runtime.Debugging
                 return;
             }
 
-            float scrollHeight = Mathf.Max(120f, _windowRect.height - 440f);
+            float scrollHeight = 210f;
             _scrollPos = GUILayout.BeginScrollView(_scrollPos, GUILayout.Height(scrollHeight));
 
             for (int i = 0; i < orders.Count; i++)

@@ -165,6 +165,9 @@ namespace TMBS.Editor
             if (debugProp != null)
             {
                 EditorGUILayout.LabelField("Pending Debug", EditorStyles.boldLabel);
+                EditorGUILayout.HelpBox(
+                    "Leave 'Enabled' unchecked for agent-driven deferred construction (attach or spawn TmbsBuildAgent, or use the TmbsDebugMenu agent spawner). 'Visual Debug' configures Scene and Game View overlays for pending cells and agents.",
+                    MessageType.Info);
                 EditorGUI.indentLevel++;
                 EditorGUILayout.PropertyField(debugProp, true);
                 EditorGUI.indentLevel--;

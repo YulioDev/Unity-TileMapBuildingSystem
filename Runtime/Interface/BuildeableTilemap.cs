@@ -243,6 +243,8 @@ namespace TMBS.Runtime.Interface
         public TMBS.Core.Pending.IPendingWorkApi PendingWorkApi => _pendingWorkApi;
         public TMBS.Core.Pending.IPendingStore PendingStore => (_pendingWorkApi as TMBS.Core.Pending.PendingWorkApi)?.Store;
         public Tilemap TargetTilemap => targetTilemap;
+        public Tilemap PendingTilemap => pendingTilemap;
+        public Camera ResolvedCamera => ResolveCamera();
         public IBuildInputAdapter ActiveInputAdapter => _input;
 
         public bool TryGetBuildRecord(Vector3Int cell, out TMBS.Core.Metadata.BuildRecord record)
@@ -643,6 +645,11 @@ namespace TMBS.Runtime.Interface
                 return;
 
             var debugConfig = rootConfig.GetPendingDebugConfig();
+            if (debugConfig.GetVisualDebugConfig().enabled)
+            {
+                EnsurePendingVisualDebuggerComponent();
+            }
+
             if (!debugConfig.renderDebugTiles || debugConfig.tileArchetype == null)
                 return;
 
@@ -663,6 +670,23 @@ namespace TMBS.Runtime.Interface
                 _pendingChangedSubscription = _events.Subscribe<PendingChangedEvent>(OnPendingChanged);
                 _pendingCompletedSubscription = _events.Subscribe<PendingCompletedEvent>(OnPendingCompleted);
             }
+        }
+
+        private void EnsurePendingVisualDebuggerComponent()
+        {
+            if (GetComponent<TMBS.Runtime.Debugging.TmbsPendingVisualDebugger>() != null)
+                return;
+
+#if UNITY_2023_1_OR_NEWER
+            var existing = FindAnyObjectByType<TMBS.Runtime.Debugging.TmbsPendingVisualDebugger>();
+#else
+            var existing = FindObjectOfType<TMBS.Runtime.Debugging.TmbsPendingVisualDebugger>();
+#endif
+            if (existing != null)
+                return;
+
+            var debugger = gameObject.AddComponent<TMBS.Runtime.Debugging.TmbsPendingVisualDebugger>();
+            debugger.TargetBuildeableTilemap = this;
         }
 
         private void OnPendingCreated(PendingCreatedEvent evt)
